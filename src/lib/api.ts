@@ -1,0 +1,215 @@
+/**
+ * src/lib/api.ts — Centralized API service layer.
+ * All fetch() calls live here. Views import typed functions instead of
+ * building fetch requests inline.
+ */
+
+import type {
+    HistoryEntry,
+    GenerationResult,
+    DashboardStats,
+    OutreachResult,
+    JobTitleResult,
+    AppConfig,
+    UserProfile,
+    UserPreferences,
+} from '../../shared/types';
+import { withApiKey } from './apiKey';
+
+async function readError(res: Response, fallback: string): Promise<string> {
+    try {
+        const text = await res.text();
+        if (!text) return fallback;
+        try {
+            const data = JSON.parse(text);
+            return data.error || fallback;
+        } catch {
+            return fallback;
+        }
+    } catch {
+        return fallback;
+    }
+}
+
+// ── Config ──────────────────────────────────────────────────
+
+let cachedConfig: AppConfig | null = null;
+
+export async function fetchConfig(force = false): Promise<AppConfig> {
+    if (cachedConfig && !force) return cachedConfig;
+    const res = await fetch('/api/config');
+    if (!res.ok) throw new Error('Failed to load config');
+    cachedConfig = await res.json();
+    return cachedConfig!;
+}
+
+export function clearConfigCache(): void {
+    cachedConfig = null;
+}
+
+// ── Profile ─────────────────────────────────────────────────
+
+export async function fetchProfile(): Promise<UserProfile> {
+    const res = await fetch('/api/profile');
+    if (!res.ok) throw new Error('Failed to load profile');
+    return res.json();
+}
+
+export async function saveProfile(profile: UserProfile): Promise<void> {
+    const res = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+    });
+    if (!res.ok) throw new Error(await readError(res, 'Failed to save profile'));
+    clearConfigCache();
+}
+
+// ── Preferences ─────────────────────────────────────────────
+
+export async function fetchPreferences(): Promise<UserPreferences> {
+    const res = await fetch('/api/preferences');
+    if (!res.ok) throw new Error('Failed to load preferences');
+    return res.json();
+}
+
+export async function savePreferences(prefs: UserPreferences): Promise<void> {
+    const res = await fetch('/api/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(prefs),
+    });
+    if (!res.ok) throw new Error(await readError(res, 'Failed to save preferences'));
+    clearConfigCache();
+}
+
+// ── History ─────────────────────────────────────────────────
+
+export async function fetchHistory(): Promise<HistoryEntry[]> {
+    const res = await fetch('/api/history');
+    if (!res.ok) throw new Error('Failed to load history');
+    return res.json();
+}
+
+export async function deleteGeneration(id: number): Promise<void> {
+    const res = await fetch(`/api/history/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Failed to delete generation');
+}
+
+// ── Master Resume ───────────────────────────────────────────
+
+export async function fetchMasterResume(): Promise<string> {
+    const res = await fetch('/api/master');
+    if (!res.ok) throw new Error('Failed to load master resume');
+    const data = await res.json();
+    return data.content || '';
+}
+
+export async function saveMasterResume(content: string): Promise<void> {
+    const res = await fetch('/api/master', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+    });
+    if (!res.ok) throw new Error(await readError(res, 'Failed to save master resume'));
+    clearConfigCache();
+}
+
+export async function uploadMasterResume(file: File): Promise<string> {
+    const formData = new FormData();
+    formData.append('resume', file);
+    const res = await fetch('/api/master/upload', withApiKey({ method: 'POST', body: formData }));
+    if (!res.ok) throw new Error(await readError(res, 'Upload failed'));
+    const { content } = await res.json();
+    clearConfigCache();
+    return content;
+}
+
+// ── Generation (SSE) ────────────────────────────────────────
+
+export interface SSECallbacks {
+    onProgress: (message: string) => void;
+    onComplete: (result: GenerationResult) => void;
+    onError: (message: string) => void;
+}
+
+export async function generateResume(
+    jobDescription: string,
+    companyName: string | undefined,
+    callbacks: SSECallbacks,
+    signal?: AbortSignal,
+): Promise<void> {
+    const response = await fetch('/api/generate', withApiKey({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobDescription, companyName }),
+        signal,
+    }));
+
+    if (!response.ok) {
+        throw new Error(await readError(response, `Server error: ${response.status}`));
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        let eventType = '';
+        for (const line of lines) {
+            if (line.startsWith('event: ')) {
+                eventType = line.slice(7).trim();
+            } else if (line.startsWith('data: ')) {
+                try {
+                    const data = JSON.parse(line.slice(6));
+                    if (eventType === 'progress') callbacks.onProgress(data.message);
+                    else if (eventType === 'complete') callbacks.onComplete(data.result);
+                    else if (eventType === 'error') callbacks.onError(data.message);
+                } catch {
+                    // malformed SSE — skip
+                }
+            }
+        }
+    }
+}
+
+// ── Dashboard ───────────────────────────────────────────────
+
+export async function fetchDashboardStats(): Promise<DashboardStats> {
+    const res = await fetch('/api/dashboard/stats');
+    if (!res.ok) throw new Error('Failed to load dashboard stats');
+    return res.json();
+}
+
+// ── Outreach ────────────────────────────────────────────────
+
+export async function generateOutreach(company: string, role: string): Promise<OutreachResult> {
+    const res = await fetch('/api/outreach', withApiKey({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company, role }),
+    }));
+    if (!res.ok) throw new Error(await readError(res, 'Failed to generate outreach'));
+    return res.json();
+}
+
+// ── Job Titles ──────────────────────────────────────────────
+
+export async function fetchJobTitles(): Promise<JobTitleResult> {
+    const res = await fetch('/api/job-titles');
+    if (!res.ok) throw new Error('Failed to load job titles');
+    return res.json();
+}
+
+export async function regenerateJobTitles(): Promise<JobTitleResult> {
+    const res = await fetch('/api/job-titles/generate', withApiKey({ method: 'POST' }));
+    if (!res.ok) throw new Error(await readError(res, 'Failed to generate job titles'));
+    return res.json();
+}

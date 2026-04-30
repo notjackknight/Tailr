@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>{{name}} — Resume</title>
+  <style>
+    @page { size: 8.5in 11in; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 8.5in;
+      height: 11in;
+      font-family: 'Times New Roman', Times, serif;
+      font-size: 11pt;
+      line-height: 1.15;
+      color: #000;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    body { padding: 0.3in 0.5in; }
+
+    .resume-container {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: 100%;
+    }
+
+    .section-group { display: flex; flex-direction: column; }
+
+    .header { text-align: center; margin-bottom: 4pt; }
+    .header h1 {
+      font-size: 20pt;
+      font-weight: bold;
+      margin-bottom: 1pt;
+      line-height: 1.1;
+    }
+    .header .contact-line { font-size: 11pt; }
+    .header .contact-line a { color: #000; text-decoration: none; }
+
+    .section-heading {
+      font-size: 11pt;
+      font-weight: bold;
+      text-transform: uppercase;
+      border-bottom: 1pt solid #000;
+      padding-bottom: 1pt;
+      margin-top: 6pt;
+      margin-bottom: 3pt;
+      line-height: 1.15;
+    }
+
+    .profile p { font-size: 11pt; line-height: 1.15; }
+
+    .skills-list { list-style: none; padding: 0; }
+    .skills-list li { font-size: 11pt; line-height: 1.15; }
+    .skills-list li strong { font-weight: bold; }
+
+    .job { margin-bottom: 3pt; }
+    .job-header, .job-title-row, .edu-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .job-title-row { margin-bottom: 1pt; }
+    .job-company { font-weight: bold; font-size: 11pt; }
+    .job-location, .job-dates, .job-title { font-size: 11pt; }
+    .job-title { font-style: italic; }
+
+    .job-bullets, .project-bullets, .volunteer-bullets {
+      list-style: disc;
+      padding-left: 18pt;
+      margin: 0;
+    }
+    .job-bullets li, .project-bullets li, .volunteer-bullets li {
+      font-size: 11pt;
+      line-height: 1.15;
+    }
+    .job-bullets li strong { font-weight: bold; }
+
+    .project { margin-bottom: 2pt; }
+    .project-name { font-weight: bold; font-size: 11pt; }
+    .project-tech { font-size: 11pt; font-style: italic; }
+
+    .edu-school { font-weight: bold; font-size: 11pt; }
+    .edu-location, .edu-degree, .edu-honors, .edu-coursework { font-size: 11pt; line-height: 1.15; }
+    .edu-degree { font-style: italic; }
+
+    .cert-row, .award-row {
+      font-size: 11pt;
+      line-height: 1.15;
+    }
+    .cert-name, .award-name { font-weight: bold; }
+    .award-desc { font-style: italic; }
+
+    .volunteer-org { font-weight: bold; font-size: 11pt; }
+    .volunteer-role { font-style: italic; font-size: 11pt; }
+    .volunteer-dates { font-size: 11pt; }
+  </style>
+</head>
+
+<body>
+  <div class="resume-container">
+    <!-- ============ HEADER ============ -->
+    <div class="header section-group">
+      <h1>{{name}}</h1>
+      <div class="contact-line">
+        {{#contactParts}}{{.}}{{^last}} • {{/last}}{{/contactParts}}
+      </div>
+    </div>
+
+    <!-- ============ PROFILE ============ -->
+    {{#hasProfile}}
+    <div class="section-group">
+      <div class="section-heading">Profile</div>
+      <div class="profile"><p>{{profile}}</p></div>
+    </div>
+    {{/hasProfile}}
+
+    <!-- ============ SKILLS ============ -->
+    {{#hasSkills}}
+    <div class="section-group">
+      <div class="section-heading">Skills</div>
+      <ul class="skills-list">
+        {{#skills}}<li><strong>{{category}}:</strong> {{items}}</li>{{/skills}}
+      </ul>
+    </div>
+    {{/hasSkills}}
+
+    <!-- ============ EXPERIENCE ============ -->
+    {{#hasExperience}}
+    <div class="section-group">
+      <div class="section-heading">Experience</div>
+      {{#experience}}
+      <div class="job">
+        <div class="job-header">
+          <span class="job-company">{{company}}</span>
+          <span class="job-location">{{location}}</span>
+        </div>
+        <div class="job-title-row">
+          <span class="job-title">{{title}}</span>
+          <span class="job-dates">{{dates}}</span>
+        </div>
+        <ul class="job-bullets">
+          {{#bullets}}<li>{{#boldPrefix}}<strong>{{boldPrefix}}</strong> {{/boldPrefix}}{{text}}</li>{{/bullets}}
+        </ul>
+      </div>
+      {{/experience}}
+    </div>
+    {{/hasExperience}}
+
+    <!-- ============ PROJECTS ============ -->
+    {{#hasProjects}}
+    <div class="section-group">
+      <div class="section-heading">Projects</div>
+      {{#projects}}
+      <div class="project">
+        <span class="project-name">{{name}}</span>{{#tech}}<span class="project-tech"> — ({{tech}})</span>{{/tech}}
+        <ul class="project-bullets">
+          {{#bullets}}<li>{{text}}</li>{{/bullets}}
+        </ul>
+      </div>
+      {{/projects}}
+    </div>
+    {{/hasProjects}}
+
+    <!-- ============ CERTIFICATIONS ============ -->
+    {{#hasCertifications}}
+    <div class="section-group">
+      <div class="section-heading">Certifications</div>
+      {{#certifications}}
+      <div class="cert-row">
+        <span class="cert-name">{{name}}</span>{{#issuer}} — {{issuer}}{{/issuer}}{{#date}} ({{date}}){{/date}}
+      </div>
+      {{/certifications}}
+    </div>
+    {{/hasCertifications}}
+
+    <!-- ============ AWARDS ============ -->
+    {{#hasAwards}}
+    <div class="section-group">
+      <div class="section-heading">Awards</div>
+      {{#awards}}
+      <div class="award-row">
+        <span class="award-name">{{name}}</span>{{#issuer}} — {{issuer}}{{/issuer}}{{#date}} ({{date}}){{/date}}{{#description}} <span class="award-desc">— {{description}}</span>{{/description}}
+      </div>
+      {{/awards}}
+    </div>
+    {{/hasAwards}}
+
+    <!-- ============ VOLUNTEER ============ -->
+    {{#hasVolunteer}}
+    <div class="section-group">
+      <div class="section-heading">Volunteer</div>
+      {{#volunteer}}
+      <div>
+        <div class="job-header">
+          <span class="volunteer-org">{{organization}}</span>
+          <span class="volunteer-dates">{{dates}}</span>
+        </div>
+        {{#role}}<div class="volunteer-role">{{role}}</div>{{/role}}
+        {{#bullets.length}}
+        <ul class="volunteer-bullets">{{#bullets}}<li>{{text}}</li>{{/bullets}}</ul>
+        {{/bullets.length}}
+      </div>
+      {{/volunteer}}
+    </div>
+    {{/hasVolunteer}}
+
+    <!-- ============ EDUCATION ============ -->
+    {{#hasEducation}}
+    <div class="section-group">
+      <div class="section-heading">Education</div>
+      {{#education}}
+      <div>
+        <div class="edu-header">
+          <span class="edu-school">{{institution}}{{#graduation}} | {{graduation}}{{/graduation}}</span>
+          <span class="edu-location">{{location}}</span>
+        </div>
+        <div class="edu-degree">{{degree}}{{#minor}} | Minor: {{minor}}{{/minor}}{{#gpa}} | GPA: {{gpa}}{{/gpa}}</div>
+        {{#honorsLine}}<div class="edu-honors">Honors: {{honorsLine}}</div>{{/honorsLine}}
+        {{#coursework}}<div class="edu-coursework">Relevant Coursework: {{coursework}}</div>{{/coursework}}
+      </div>
+      {{/education}}
+    </div>
+    {{/hasEducation}}
+  </div>
+</body>
+</html>

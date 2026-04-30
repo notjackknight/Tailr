@@ -1,0 +1,35 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# User data — never commit a real resume or generated output
+data/master_resume.yaml
+data/profile.json
+data/preferences.json
+data/job_titles.json
+
+# Generated outputs
+output/*
+!output/.gitkeep
+uploads/*
+!uploads/.gitkeep
+
+# SQLite database files
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Editor / OS
+.vscode/
+*.swp
+
+# Legacy artifacts
+legacy/
+
+.claude/
+*.code-workspace
