@@ -1,30 +1,60 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
 import { ScoreRing } from '../components/ui/ScoreRing';
-import { Sparkles, Download, ArrowRight, RefreshCw, Target, AlertTriangle, Tag, Eye } from 'lucide-react';
+import { Spinner } from '../components/ui/Spinner';
+import {
+  Sparkles,
+  Download,
+  RefreshCw,
+  Target,
+  AlertTriangle,
+  Tag,
+  Eye,
+  ClipboardPaste,
+  ChevronLeft,
+  Settings as SettingsIcon,
+  Send,
+  ExternalLink,
+} from 'lucide-react';
 import { cn, downloadResume } from '../lib/utils';
 import { generateResume } from '../lib/api';
+import { toast } from '../components/ui/Toast';
 import type { GenerationResult, AppConfig } from '../../shared/types';
 
 interface StudioProps {
   config: AppConfig | null;
   hasApiKey: boolean;
+  onNavigate?: (view: 'dashboard' | 'studio' | 'settings') => void;
 }
 
-export const Studio = ({ config, hasApiKey }: StudioProps) => {
+type StudioStage = 'input' | 'generating' | 'result';
+
+export const Studio = ({ config, hasApiKey, onNavigate }: StudioProps) => {
   const [jobDescription, setJobDescription] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [previousJD, setPreviousJD] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [showOptions, setShowOptions] = useState(false);
+  const [mobileResultView, setMobileResultView] = useState(true);
   const abortRef = useRef<AbortController | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [activeTab, setActiveTab] = useState<'preview' | 'metrics'>('preview');
   const contactName = config?.profile?.name || 'Resume';
   const canGenerate = hasApiKey && (config?.masterResumePresent ?? false);
+
+  // Autofocus textarea on desktop only — would invoke the keyboard on mobile.
+  useEffect(() => {
+    const isDesktop = window.matchMedia('(min-width: 1024px)').matches;
+    if (isDesktop && !result) textareaRef.current?.focus();
+  }, [result]);
+
+  const stage: StudioStage = result ? 'result' : isGenerating ? 'generating' : 'input';
 
   const handleGenerate = useCallback(async () => {
     if (!jobDescription.trim() || isGenerating || !canGenerate) return;
@@ -34,6 +64,8 @@ export const Studio = ({ config, hasApiKey }: StudioProps) => {
     setError(null);
     setStatusMessage('Connecting...');
     setActiveTab('preview');
+    setMobileResultView(true);
+    setPreviousJD(jobDescription);
 
     abortRef.current = new AbortController();
 
@@ -46,19 +78,23 @@ export const Studio = ({ config, hasApiKey }: StudioProps) => {
           onComplete: (genResult) => {
             setResult(genResult);
             setStatusMessage('');
+            toast.success(`Tailored resume ready — fit score ${genResult.fitAssessment.score}/10`);
           },
           onError: (message) => {
             setError(message);
             setStatusMessage('');
             setIsGenerating(false);
+            toast.error(message);
           },
         },
         abortRef.current.signal,
       );
     } catch (err: any) {
       if (err.name !== 'AbortError') {
-        setError(err.message || 'Generation failed');
+        const msg = err.message || 'Generation failed';
+        setError(msg);
         setStatusMessage('');
+        toast.error(msg);
       }
     } finally {
       setIsGenerating(false);
@@ -70,245 +106,445 @@ export const Studio = ({ config, hasApiKey }: StudioProps) => {
     setResult(null);
     setError(null);
     setStatusMessage('');
-    setCompanyName('');
-  }, []);
+    // Keep the previous JD as a draft so the user can iterate.
+    setJobDescription(previousJD || jobDescription);
+    setMobileResultView(true);
+    setTimeout(() => textareaRef.current?.focus(), 100);
+  }, [previousJD, jobDescription]);
+
+  const handleRegenerate = useCallback(() => {
+    if (!previousJD) return;
+    setJobDescription(previousJD);
+    setResult(null);
+    handleGenerate();
+  }, [previousJD, handleGenerate]);
+
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        setJobDescription((prev) => (prev ? `${prev}\n${text}` : text));
+        toast.success('Pasted from clipboard');
+      }
+    } catch {
+      toast.error('Could not access clipboard. Paste manually.');
+    }
+  };
+
+  // Cmd/Ctrl + Enter shortcut.
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      handleGenerate();
+    }
+  };
 
   const blockReason = !hasApiKey
     ? 'Add an LLM API key in Settings before generating.'
     : !config?.masterResumePresent
-    ? 'Upload your master resume from the Dashboard before generating.'
+    ? 'Upload your master resume from the Library before generating.'
     : null;
 
-  return (
-    <div className="flex flex-col lg:flex-row gap-6 lg:h-full">
-      {/* LEFT */}
-      <div className="flex-1 flex flex-col min-h-[500px] lg:h-full">
-        <GlassCard className="flex-1 flex flex-col p-0 overflow-hidden border-white/10">
-          <div className="p-6 border-b border-white/5 bg-white/[0.02]">
-            <h2 className="text-2xl font-bold text-white">Job Description</h2>
-            <p className="text-gray-400 text-sm mt-1">Paste the JD here. We'll handle the rest.</p>
+  // ── INPUT STAGE ───────────────────────────────────────────────────
+  if (stage === 'input') {
+    return (
+      <div className="flex flex-col gap-4 md:gap-6 flex-1">
+        <header className="flex items-end justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white mb-1.5">
+              Tailor a resume
+            </h1>
+            <p className="text-sm md:text-base text-gray-400">
+              Paste a job description below. We'll match it to your master resume.
+            </p>
           </div>
+          {canGenerate && (
+            <div className="hidden md:flex items-center gap-1 text-[11px] text-gray-500">
+              <kbd className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-gray-300 font-mono">⌘</kbd>
+              <kbd className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-gray-300 font-mono">↵</kbd>
+              to generate
+            </div>
+          )}
+        </header>
 
-          <div className="flex-1 relative group">
+        <GlassCard variant="featured" radius="xl" padding="none" className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 relative flex flex-col">
             <textarea
+              ref={textareaRef}
               value={jobDescription}
               onChange={(e) => setJobDescription(e.target.value)}
-              placeholder="Paste the full job description here (minimum ~50 characters)."
-              className="w-full h-full bg-transparent p-6 text-base leading-relaxed text-white placeholder:text-gray-600 resize-none focus:outline-none focus:ring-0 font-sans"
+              onKeyDown={onKeyDown}
+              placeholder="Paste the full job description here. Include responsibilities, requirements, and tech stack — the more context, the better the match."
+              className="flex-1 min-h-[280px] md:min-h-[400px] w-full bg-transparent p-5 md:p-7 text-base leading-relaxed text-white placeholder:text-gray-600 resize-none focus:outline-none font-sans"
               spellCheck={false}
-              disabled={isGenerating}
               aria-label="Job description"
             />
-            <div className="absolute inset-0 pointer-events-none border border-transparent group-focus-within:border-[#FF4F00]/20 transition-colors duration-500" />
+
+            <AnimatePresence>
+              {(error || blockReason) && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden border-t border-white/5"
+                >
+                  <div
+                    className={cn(
+                      'px-5 md:px-7 py-3 text-sm flex items-start gap-2',
+                      error
+                        ? 'text-red-300 bg-red-500/5'
+                        : 'text-yellow-300 bg-yellow-500/5',
+                    )}
+                  >
+                    <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                    <span className="flex-1">{error || blockReason}</span>
+                    {error && (
+                      <button
+                        onClick={() => {
+                          setError(null);
+                          handleGenerate();
+                        }}
+                        className="text-xs font-semibold underline hover:no-underline"
+                      >
+                        Retry
+                      </button>
+                    )}
+                    {!error && blockReason && onNavigate && (
+                      <button
+                        onClick={() =>
+                          onNavigate(hasApiKey ? 'dashboard' : 'settings')
+                        }
+                        className="text-xs font-semibold underline hover:no-underline"
+                      >
+                        Fix it
+                      </button>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
-          <AnimatePresence>
-            {(statusMessage || error || blockReason) && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden border-t border-white/5"
-              >
-                <div className={cn(
-                  'px-6 py-3 text-sm font-mono',
-                  error ? 'text-red-400 bg-red-500/5'
-                    : blockReason ? 'text-yellow-300 bg-yellow-500/5'
-                    : 'text-gray-400 bg-white/[0.02]',
-                )}>
-                  {error ? `⚠ ${error}` : blockReason ? `⚠ ${blockReason}` : `⟫ ${statusMessage}`}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Toolbar / options + generate */}
+          <div className="border-t border-white/5 bg-white/[0.02] px-4 md:px-5 py-3 md:py-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<ClipboardPaste size={14} />}
+                  onClick={handlePaste}
+                  type="button"
+                >
+                  Paste
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<SettingsIcon size={14} />}
+                  onClick={() => setShowOptions((v) => !v)}
+                  aria-expanded={showOptions}
+                  type="button"
+                >
+                  {showOptions ? 'Hide options' : 'Options'}
+                </Button>
+                {jobDescription && (
+                  <span className="hidden sm:inline text-[11px] text-gray-600 ml-2">
+                    {jobDescription.length.toLocaleString()} chars
+                  </span>
+                )}
+              </div>
 
-          <div className="p-6 border-t border-white/5 bg-white/[0.02] space-y-3">
-            <div className="flex items-center gap-3">
-              <label className="text-xs text-gray-400 uppercase tracking-wider whitespace-nowrap" htmlFor="company-name">Company</label>
-              <input
-                id="company-name"
-                type="text"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Optional — overrides the company extracted from the JD"
-                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-[#FF4F00]/30 transition-colors"
-                disabled={isGenerating}
+              <Button
+                variant="primary"
+                size="md"
+                onClick={handleGenerate}
+                disabled={!jobDescription.trim() || isGenerating || !canGenerate}
+                isLoading={isGenerating}
+                icon={!isGenerating ? <Sparkles size={16} /> : undefined}
+              >
+                Tailor resume
+              </Button>
+            </div>
+
+            <AnimatePresence initial={false}>
+              {showOptions && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="pt-3 mt-3 border-t border-white/5">
+                    <label
+                      htmlFor="company-name"
+                      className="text-[11px] text-gray-500 uppercase tracking-wider mb-1.5 block"
+                    >
+                      Company name
+                    </label>
+                    <input
+                      id="company-name"
+                      type="text"
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      placeholder="Optional — overrides the company extracted from the JD"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-2 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-[#054F31] transition-colors"
+                      disabled={isGenerating}
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </GlassCard>
+      </div>
+    );
+  }
+
+  // ── GENERATING STAGE ─────────────────────────────────────────────
+  if (stage === 'generating') {
+    return (
+      <div className="flex-1 flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center max-w-md text-center px-4">
+          <div className="w-72 h-96 bg-white/[0.04] rounded-2xl border border-white/10 relative overflow-hidden mb-8">
+            <div className="p-6 space-y-3">
+              <div className="h-4 bg-white/10 rounded w-3/4" />
+              <div className="h-3 bg-white/5 rounded w-1/2" />
+              <div className="space-y-2 mt-6">
+                <div className="h-2 bg-white/5 rounded w-full" />
+                <div className="h-2 bg-white/5 rounded w-full" />
+                <div className="h-2 bg-white/5 rounded w-5/6" />
+                <div className="h-2 bg-white/5 rounded w-4/6 mt-4" />
+                <div className="h-2 bg-white/5 rounded w-full" />
+                <div className="h-2 bg-white/5 rounded w-3/4" />
+              </div>
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#FF4F00]/30 to-transparent h-1/2 w-full animate-[scan_1.6s_linear_infinite]" />
+          </div>
+
+          <div className="h-7 overflow-hidden relative">
+            <AnimatePresence mode="wait">
+              <motion.p
+                key={statusMessage}
+                initial={{ y: 14, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -14, opacity: 0 }}
+                className="text-sm font-mono uppercase tracking-widest font-bold whitespace-nowrap"
+                style={{ color: '#054F31' }}
+              >
+                {statusMessage || 'Initializing…'}
+              </motion.p>
+            </AnimatePresence>
+          </div>
+          <p className="mt-4 text-xs text-gray-500">
+            Tailoring usually takes 8–20 seconds.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── RESULT STAGE ─────────────────────────────────────────────────
+  if (!result) return null;
+
+  return (
+    <div className="flex-1 flex flex-col gap-4">
+      {/* Result header — score + meta + actions */}
+      <header className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3 md:gap-4 min-w-0">
+          <ScoreRing score={result.fitAssessment.score} size={56} strokeWidth={4} />
+          <div className="min-w-0">
+            <h1 className="text-lg md:text-2xl font-bold text-white truncate leading-tight">
+              {result.fitAssessment.role}
+            </h1>
+            <p className="text-xs md:text-sm text-gray-400 truncate">
+              {result.fitAssessment.company}
+              <span className="hidden sm:inline">
+                {' '}
+                · Fit score {result.fitAssessment.score}/10
+              </span>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 md:gap-2 flex-wrap">
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Download size={14} />}
+            onClick={() =>
+              downloadResume(result.pdfFilename, result.fitAssessment.company, 'pdf', contactName)
+            }
+          >
+            PDF
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Download size={14} />}
+            onClick={() =>
+              downloadResume(result.pdfFilename, result.fitAssessment.company, 'docx', contactName)
+            }
+          >
+            DOCX
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<RefreshCw size={14} />}
+            onClick={handleRegenerate}
+            disabled={!previousJD || isGenerating}
+            title="Generate again with the same JD"
+          >
+            <span className="hidden sm:inline">Regenerate</span>
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Send size={14} />}
+            onClick={handleReset}
+          >
+            New
+          </Button>
+        </div>
+      </header>
+
+      {/* Mobile pane switcher */}
+      <div className="md:hidden">
+        <div className="inline-flex items-center gap-1 rounded-xl bg-white/5 border border-white/10 p-1 w-full">
+          <button
+            type="button"
+            onClick={() => setMobileResultView(true)}
+            className={cn(
+              'flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-colors',
+              mobileResultView ? 'bg-gradient-tailr-soft text-white border border-[#FF4F00]/30' : 'text-gray-400',
+            )}
+          >
+            Resume preview
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileResultView(false)}
+            className={cn(
+              'flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-colors',
+              !mobileResultView ? 'bg-gradient-tailr-soft text-white border border-[#FF4F00]/30' : 'text-gray-400',
+            )}
+          >
+            Analysis
+          </button>
+        </div>
+      </div>
+
+      {/* Main result body */}
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0">
+        {/* Analysis panel */}
+        <div className={cn('flex flex-col lg:w-[360px] xl:w-[400px] shrink-0', !mobileResultView ? '' : 'hidden md:flex')}>
+          <GlassCard padding="none" radius="lg" className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 bg-white/[0.02]">
+              <Target size={14} className="text-[#FF4F00]" />
+              <span className="text-sm font-semibold text-white">Analysis</span>
+            </div>
+            <div className="overflow-y-auto p-4 md:p-5 space-y-5">
+              <div>
+                <h4 className="text-[11px] uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1.5">
+                  <Target size={12} /> Why this fits
+                </h4>
+                <p className="text-sm text-gray-300 leading-relaxed">
+                  {result.fitAssessment.reasoning}
+                </p>
+              </div>
+
+              {result.fitAssessment.atsKeywords.length > 0 && (
+                <div>
+                  <h4 className="text-[11px] uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1.5">
+                    <Tag size={12} /> ATS keywords matched ({result.fitAssessment.atsKeywords.length})
+                  </h4>
+                  <div className="flex flex-wrap gap-1.5">
+                    {result.fitAssessment.atsKeywords.map((kw, i) => (
+                      <span
+                        key={i}
+                        className="px-2.5 py-1 text-xs font-medium rounded-full bg-neon-green/10 text-neon-green border border-neon-green/20"
+                      >
+                        {kw}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {result.fitAssessment.stretchAreas.length > 0 && (
+                <div>
+                  <h4 className="text-[11px] uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1.5">
+                    <AlertTriangle size={12} /> Stretch areas ({result.fitAssessment.stretchAreas.length})
+                  </h4>
+                  <div className="space-y-2">
+                    {result.fitAssessment.stretchAreas.map((area, i) => (
+                      <div
+                        key={i}
+                        className="flex items-start gap-2 p-3 bg-yellow-500/5 border border-yellow-500/10 rounded-xl"
+                      >
+                        <AlertTriangle size={12} className="mt-0.5 shrink-0 text-yellow-400" />
+                        <span className="text-xs text-yellow-200/90 leading-relaxed">{area}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </GlassCard>
+        </div>
+
+        {/* PDF preview */}
+        <div className={cn('flex-1 flex flex-col min-h-0', mobileResultView ? '' : 'hidden md:flex')}>
+          <GlassCard padding="none" radius="lg" className="flex-1 flex flex-col overflow-hidden bg-white/[0.02]">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10 bg-white/[0.02]">
+              <div className="flex items-center gap-2">
+                <Eye size={14} className="text-gray-400" />
+                <span className="text-sm font-semibold text-white">PDF preview</span>
+              </div>
+              {/* Mobile-friendly: open in new tab if iframe is hard to read */}
+              <a
+                href={`/api/resume/${result.pdfFilename}`}
+                target="_blank"
+                rel="noreferrer"
+                className="md:hidden text-[11px] text-gray-400 hover:text-white inline-flex items-center gap-1 underline-offset-2 hover:underline"
+              >
+                Open in new tab <ExternalLink size={11} />
+              </a>
+            </div>
+            <div className="flex-1 bg-white">
+              <iframe
+                src={`/api/resume/${result.pdfFilename}#toolbar=0&view=FitH`}
+                className="w-full h-full border-0 min-h-[420px] md:min-h-[600px]"
+                title="Tailored resume preview"
               />
             </div>
-            <Button
-              variant="primary"
-              size="xl"
-              onClick={handleGenerate}
-              disabled={!jobDescription.trim() || isGenerating || !canGenerate}
-              isLoading={isGenerating}
-              icon={!isGenerating && <Sparkles size={20} />}
-              className="w-full shadow-2xl shadow-[#FF4F00]/20"
-            >
-              {isGenerating ? 'Tailoring...' : 'Tailr My Resume'}
-            </Button>
-          </div>
-        </GlassCard>
+          </GlassCard>
+        </div>
       </div>
 
-      {/* RIGHT */}
-      <div className="flex-1 min-h-[400px] lg:h-full lg:min-h-0">
-        <GlassCard className="h-full p-0 relative overflow-hidden flex flex-col border-white/10 bg-[#0A0A0A]">
-          <div className="flex-1 relative flex flex-col overflow-hidden">
-            {!isGenerating && !result && (
-              <div className="flex-1 flex items-center justify-center p-8">
-                <div className="text-center max-w-sm">
-                  <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mx-auto mb-6 border border-white/10">
-                    <ArrowRight className="text-gray-500" size={32} />
-                  </div>
-                  <h3 className="text-xl font-bold text-white mb-2">Ready to Tailr</h3>
-                  <p className="text-gray-500">
-                    Paste a job description on the left to generate your optimized resume.
-                  </p>
-                </div>
-              </div>
-            )}
+      {/* Footer hint — link back to library */}
+      {onNavigate && (
+        <div className="text-xs text-gray-500 text-center">
+          Saved to your{' '}
+          <button
+            type="button"
+            onClick={() => onNavigate('dashboard')}
+            className="text-[#FF4F00] hover:text-[#FF6B1F] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4F00] rounded"
+          >
+            Library
+            <ChevronLeft size={11} className="inline rotate-180 ml-0.5" />
+          </button>
+          .
+        </div>
+      )}
 
-            {isGenerating && (
-              <div className="flex-1 flex flex-col items-center justify-center bg-transparent z-30">
-                <div className="w-64 h-80 bg-white/5 rounded-lg border border-white/10 relative overflow-hidden mb-8">
-                  <div className="p-6 space-y-4">
-                    <div className="h-4 bg-white/10 rounded w-3/4" />
-                    <div className="h-3 bg-white/5 rounded w-1/2" />
-                    <div className="space-y-2 mt-8">
-                      <div className="h-2 bg-white/5 rounded w-full" />
-                      <div className="h-2 bg-white/5 rounded w-full" />
-                      <div className="h-2 bg-white/5 rounded w-5/6" />
-                    </div>
-                  </div>
-                  <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#FF4F00]/20 to-transparent h-1/2 w-full animate-[scan_1.5s_linear_infinite]" />
-                </div>
-                <div className="h-8 overflow-hidden relative">
-                  <AnimatePresence mode="wait">
-                    <motion.p
-                      key={statusMessage}
-                      initial={{ y: 20, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      exit={{ y: -20, opacity: 0 }}
-                      className="text-transparent bg-clip-text bg-gradient-to-r from-[#FF4F00] to-cyan-500 font-mono text-sm tracking-widest uppercase font-bold whitespace-nowrap"
-                    >
-                      {statusMessage || 'Initializing...'}
-                    </motion.p>
-                  </AnimatePresence>
-                </div>
-              </div>
-            )}
-
-            {result && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5 }}
-                className="flex-1 flex flex-col h-full bg-[#111]"
-              >
-                <div className="flex justify-between items-center p-4 border-b border-white/10 bg-black/60 relative z-10 shadow-lg">
-                  <div className="flex items-center gap-3">
-                    <ScoreRing score={result.fitAssessment.score} size={40} strokeWidth={3} />
-                    <div className="hidden sm:block">
-                      <span className="text-sm font-medium text-white block leading-tight truncate max-w-[200px]">
-                        {result.fitAssessment.company}
-                      </span>
-                      <span className="text-xs text-gray-400 block truncate max-w-[200px]">
-                        {result.fitAssessment.role}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Button
-                      variant={activeTab === 'preview' ? 'primary' : 'secondary'}
-                      size="sm"
-                      icon={<Eye size={14} />}
-                      onClick={() => setActiveTab(activeTab === 'preview' ? 'metrics' : 'preview')}
-                    >
-                      {activeTab === 'preview' ? 'Analysis' : 'Preview'}
-                    </Button>
-                    <Button variant="secondary" size="sm" icon={<Download size={14} />}
-                      onClick={() => downloadResume(result.pdfFilename, result.fitAssessment.company, 'pdf', contactName)}>
-                      PDF
-                    </Button>
-                    <Button variant="secondary" size="sm" icon={<Download size={14} />}
-                      onClick={() => downloadResume(result.pdfFilename, result.fitAssessment.company, 'docx', contactName)}>
-                      DOCX
-                    </Button>
-                    <Button variant="primary" size="sm" icon={<RefreshCw size={14} />} onClick={handleReset}>
-                      New
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-hidden relative">
-                  {activeTab === 'metrics' && (
-                    <div className="h-full overflow-y-auto">
-                      <div className="max-w-2xl mx-auto p-8 space-y-8">
-                        <div className="flex flex-col items-center gap-4 pb-8 border-b border-white/5">
-                          <ScoreRing score={result.fitAssessment.score} size={100} strokeWidth={6} />
-                          <div className="text-center">
-                            <span className="text-2xl font-bold text-white block">Fit Score</span>
-                            <span className="text-sm text-gray-500">{result.fitAssessment.score}/10 match</span>
-                          </div>
-                        </div>
-
-                        <div>
-                          <h4 className="text-xs uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-2">
-                            <Target size={14} /> Analysis
-                          </h4>
-                          <p className="text-base text-gray-300 leading-relaxed">{result.fitAssessment.reasoning}</p>
-                        </div>
-
-                        {result.fitAssessment.atsKeywords.length > 0 && (
-                          <div>
-                            <h4 className="text-xs uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
-                              <Tag size={14} /> ATS Keywords Matched
-                            </h4>
-                            <div className="flex flex-wrap gap-2">
-                              {result.fitAssessment.atsKeywords.map((kw, i) => (
-                                <span key={i} className="px-3 py-1.5 text-sm font-medium rounded-full bg-neon-green/10 text-neon-green border border-neon-green/20">
-                                  {kw}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {result.fitAssessment.stretchAreas.length > 0 && (
-                          <div>
-                            <h4 className="text-xs uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
-                              <AlertTriangle size={14} /> Stretch Areas
-                            </h4>
-                            <div className="space-y-3">
-                              {result.fitAssessment.stretchAreas.map((area, i) => (
-                                <div key={i} className="flex items-start gap-3 p-4 bg-yellow-500/5 border border-yellow-500/10 rounded-xl">
-                                  <span className="text-yellow-400 text-sm mt-0.5">⚠</span>
-                                  <span className="text-sm text-yellow-200/80 leading-relaxed">{area}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {activeTab === 'preview' && (
-                    <div className="h-full bg-white">
-                      <iframe
-                        src={`/api/resume/${result.pdfFilename}#toolbar=0&view=FitH`}
-                        className="w-full h-full border-0"
-                        title="Tailored Resume Preview"
-                      />
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </div>
-        </GlassCard>
-      </div>
+      {isGenerating && (
+        <div className="fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-3 py-2 bg-[#0A0A0A] border border-white/10 rounded-xl shadow-2xl text-xs">
+          <Spinner size={14} className="text-[#FF4F00]" />
+          <span className="text-gray-200">{statusMessage || 'Regenerating…'}</span>
+        </div>
+      )}
     </div>
   );
 };

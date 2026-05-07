@@ -1,17 +1,29 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────────────
+   PALETTE
+   - Primary: Deepest Green   #054F31
+   - Microaccent (Slate)      #526e7d
+   - Gradient stops:
+       Dark Teal   #0E4D40
+       Mid Teal    #1A9E7A
+       Bright Teal #34D8B4
+       Pale Mint   #A7F3E0
+   ───────────────────────────────────────────────────────────────────── */
+
 @theme {
-  --font-sans: "Inter", system-ui, sans-serif;
-  
-  --color-obsidian: #050505;
-  --color-obsidian-light: #0A0A0A;
-  --color-glass: rgba(255, 255, 255, 0.03);
-  --color-glass-border: rgba(255, 255, 255, 0.08);
-  --color-neon-green: #32D74B;
-  
+  --font-sans: "Space Grotesk", system-ui, sans-serif;
+
+  /* Surface tokens (light theme) */
+  --color-obsidian: #F4F6F5;          /* page background (was near-black) */
+  --color-obsidian-light: #FFFFFF;    /* card / elevated surface */
+  --color-glass: rgba(255, 255, 255, 0.7);
+  --color-glass-border: rgba(5, 79, 49, 0.10);
+  --color-neon-green: #1A9E7A;        /* repurposed: brand mid-teal */
+
   --animate-scan: scan 2s linear infinite;
-  
+
   @keyframes scan {
     0% { transform: translateY(-100%); }
     100% { transform: translateY(100%); }
@@ -19,13 +31,37 @@
 }
 
 :root {
-  --bg-obsidian: #050505;
-  --tailr-gradient: #FF4F00;
+  /* Background */
+  --bg-obsidian: #F4F6F5;
+  --bg-elevated: #FFFFFF;
+
+  /* Brand */
+  --tailr-primary: #054F31;          /* deepest green */
+  --tailr-slate: #526e7d;             /* microaccent */
+  --tailr-dark-teal: #0E4D40;
+  --tailr-mid-teal: #1A9E7A;
+  --tailr-bright-teal: #34D8B4;
+  --tailr-mint: #A7F3E0;
+
+  /* Brand "gradient" — flattened to the primary deepest green for now.
+     Keeps the original `--tailr-gradient` token name so every existing
+     `bg-gradient-tailr` / `text-gradient` utility renders as a flat fill. */
+  --tailr-gradient: #054F31;
+  --tailr-gradient-soft: rgba(5, 79, 49, 0.10);
+  --tailr-gradient-glow: rgba(5, 79, 49, 0.18);
+  --tailr-orange: #054F31; /* legacy token name kept for back-compat */
+  --tailr-pink: #054F31;   /* legacy token name kept for back-compat */
+
+  /* Text */
+  --text-strong: #0F1F1A;
+  --text-default: #1F2A26;
+  --text-muted: #526e7d;
+  --text-subtle: #7A8B92;
 }
 
 body {
   background-color: var(--bg-obsidian);
-  color: white;
+  color: var(--text-default);
   font-family: var(--font-sans);
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
@@ -38,33 +74,220 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0a0a0a; 
+  background: #E6ECEA;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #333; 
+  background: #BCC9C5;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555; 
+  background: #93A6A0;
+}
+
+/* Reduce backdrop-blur cost on mobile (perf + scroll jank) */
+@media (max-width: 767px) {
+  .glass-panel {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
 }
 
 /* Utilities */
 .glass-panel {
   background: var(--color-glass);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--color-glass-border);
+  position: relative;
 }
 
 .text-gradient {
-  background: var(--tailr-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--tailr-primary);
+  -webkit-text-fill-color: var(--tailr-primary);
 }
 
 .bg-gradient-tailr {
   background: var(--tailr-gradient);
+  color: #FFFFFF;
 }
+
+/* Anything explicitly marked text-white nested inside a primary green surface
+   should remain truly white (the global text-white override flips it dark
+   for light-on-light scenarios). */
+.bg-gradient-tailr,
+.bg-gradient-tailr *,
+.btn-primary,
+.btn-primary * {
+  color: #FFFFFF !important;
+}
+
+.bg-gradient-tailr-soft {
+  background: var(--tailr-gradient-soft);
+}
+
+.bg-gradient-tailr-glow {
+  background: var(--tailr-gradient-glow);
+}
+
+/* Focus-visible ring shared by buttons, inputs, links */
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  outline: 2px solid var(--tailr-mid-teal);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(26, 158, 122, 0.18);
+}
+
+/* Reduced-motion fallback */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   LIGHT THEME OVERRIDES
+   The components were authored against a dark theme using Tailwind utility
+   classes like `text-white`, `text-gray-400`, `bg-white/5`, `border-white/10`,
+   and `focus-visible:ring-[#FF4F00]`. Rather than touching every file, we
+   override those utility classes globally to remap them onto the light
+   palette. This keeps the JSX unchanged and means future components written
+   in the same idiom continue to work.
+   ───────────────────────────────────────────────────────────────────── */
+
+/* Text scale — remap dark-theme white/gray classes to slate-on-light */
+.text-white            { color: var(--text-strong) !important; }
+.text-white\/80        { color: var(--text-default) !important; }
+.text-white\/70        { color: var(--text-default) !important; }
+.text-gray-100         { color: var(--text-default) !important; }
+.text-gray-200         { color: var(--text-default) !important; }
+.text-gray-300         { color: var(--text-default) !important; }
+.text-gray-400         { color: var(--text-muted) !important; }
+.text-gray-500         { color: var(--text-muted) !important; }
+.text-gray-600         { color: var(--text-subtle) !important; }
+.placeholder\:text-gray-600::placeholder { color: var(--text-subtle) !important; }
+.placeholder\:text-gray-500::placeholder { color: var(--text-subtle) !important; }
+
+/* Surface tints — remap white/N alpha classes onto slate alphas
+   (semantically these were "subtle elevated surface on dark", so on light
+    they become "subtle inset/elevated on near-white"). */
+.bg-white\/\[0\.02\]   { background-color: rgba(82, 110, 125, 0.04) !important; }
+.bg-white\/\[0\.025\]  { background-color: rgba(82, 110, 125, 0.05) !important; }
+.bg-white\/\[0\.03\]   { background-color: rgba(82, 110, 125, 0.06) !important; }
+.bg-white\/\[0\.04\]   { background-color: rgba(82, 110, 125, 0.07) !important; }
+.bg-white\/\[0\.05\]   { background-color: rgba(82, 110, 125, 0.08) !important; }
+.bg-white\/\[0\.06\]   { background-color: rgba(82, 110, 125, 0.09) !important; }
+.bg-white\/5           { background-color: rgba(82, 110, 125, 0.07) !important; }
+.bg-white\/10          { background-color: rgba(82, 110, 125, 0.10) !important; }
+.bg-white\/15          { background-color: rgba(82, 110, 125, 0.13) !important; }
+.bg-white\/20          { background-color: rgba(82, 110, 125, 0.16) !important; }
+.hover\:bg-white\/5:hover    { background-color: rgba(82, 110, 125, 0.07) !important; }
+.hover\:bg-white\/10:hover   { background-color: rgba(82, 110, 125, 0.12) !important; }
+.hover\:bg-white\/15:hover   { background-color: rgba(82, 110, 125, 0.16) !important; }
+.hover\:bg-white\/\[0\.05\]:hover { background-color: rgba(82, 110, 125, 0.08) !important; }
+
+/* Borders */
+.border-white\/5       { border-color: rgba(5, 79, 49, 0.06) !important; }
+.border-white\/\[0\.06\] { border-color: rgba(5, 79, 49, 0.08) !important; }
+.border-white\/10      { border-color: rgba(5, 79, 49, 0.12) !important; }
+.border-white\/15      { border-color: rgba(5, 79, 49, 0.16) !important; }
+.border-white\/20      { border-color: rgba(5, 79, 49, 0.20) !important; }
+.hover\:border-white\/10:hover { border-color: rgba(5, 79, 49, 0.16) !important; }
+.hover\:border-white\/20:hover { border-color: rgba(5, 79, 49, 0.22) !important; }
+.hover\:border-white\/30:hover { border-color: rgba(5, 79, 49, 0.28) !important; }
+.hover\:border-white\/40:hover { border-color: rgba(5, 79, 49, 0.34) !important; }
+.focus\:border-white\/20:focus { border-color: rgba(5, 79, 49, 0.22) !important; }
+
+/* Ring — used by horizontal dividers/separators in some places */
+.ring-white\/5         { --tw-ring-color: rgba(5, 79, 49, 0.08) !important; }
+
+/* Brand accent remaps — anywhere the old orange #FF4F00 appears as a
+   utility (focus rings, accents, hover states), redirect to mid-teal. */
+.text-\[\#FF4F00\]     { color: var(--tailr-primary) !important; }
+.text-\[\#FF6B1F\]     { color: var(--tailr-mid-teal) !important; }
+.text-\[\#FF8A3D\]     { color: var(--tailr-mid-teal) !important; }
+.hover\:text-\[\#FF6B1F\]:hover { color: var(--tailr-mid-teal) !important; }
+.bg-\[\#FF4F00\]\/5    { background-color: rgba(26, 158, 122, 0.06) !important; }
+.bg-\[\#FF4F00\]\/10   { background-color: rgba(26, 158, 122, 0.10) !important; }
+.bg-\[\#FF4F00\]\/15   { background-color: rgba(26, 158, 122, 0.16) !important; }
+.bg-\[\#FF4F00\]\/20   { background-color: rgba(26, 158, 122, 0.20) !important; }
+.bg-\[\#FF4F00\]       { background-color: var(--tailr-primary) !important; }
+.via-\[\#FF4F00\]\/20  { --tw-gradient-via-stops: var(--tw-gradient-via-position), rgba(26, 158, 122, 0.20), var(--tw-gradient-to-position) !important; }
+.via-\[\#FF4F00\]\/30  { --tw-gradient-via-stops: var(--tw-gradient-via-position), rgba(26, 158, 122, 0.30), var(--tw-gradient-to-position) !important; }
+.hover\:bg-\[\#FF6B1F\]:hover { background-color: var(--tailr-mid-teal) !important; }
+.border-\[\#FF4F00\]   { border-color: var(--tailr-mid-teal) !important; }
+.border-\[\#FF4F00\]\/20 { border-color: rgba(26, 158, 122, 0.22) !important; }
+.border-\[\#FF4F00\]\/30 { border-color: rgba(26, 158, 122, 0.32) !important; }
+.border-\[\#FF4F00\]\/40 { border-color: rgba(26, 158, 122, 0.40) !important; }
+.focus\:border-\[\#FF4F00\]\/30:focus { border-color: rgba(26, 158, 122, 0.32) !important; }
+
+/* Focus rings — move from orange to mid-teal */
+.focus-visible\:ring-\[\#FF4F00\] { --tw-ring-color: var(--tailr-mid-teal) !important; }
+.focus\:ring-\[\#FF4F00\]         { --tw-ring-color: var(--tailr-mid-teal) !important; }
+.focus-visible\:ring-offset-\[\#050505\] { --tw-ring-offset-color: var(--bg-obsidian) !important; }
+.focus-visible\:ring-offset-\[\#0A0A0A\] { --tw-ring-offset-color: var(--bg-elevated) !important; }
+
+/* Modal / panel backgrounds previously hard-coded to dark hex */
+.bg-\[\#0A0A0A\]       { background-color: var(--bg-elevated) !important; }
+.bg-\[\#111\]          { background-color: var(--bg-elevated) !important; }
+.bg-\[\#050505\]       { background-color: var(--bg-obsidian) !important; }
+.bg-obsidian           { background-color: var(--bg-obsidian) !important; }
+.bg-black\/85          { background-color: rgba(15, 31, 26, 0.45) !important; }
+.bg-black\/80          { background-color: rgba(15, 31, 26, 0.40) !important; }
+.bg-black\/60          { background-color: rgba(15, 31, 26, 0.30) !important; }
+
+/* Custom kbd / pill backgrounds rendered in monochrome look on dark theme */
+.text-neon-green       { color: var(--tailr-mid-teal) !important; }
+.bg-neon-green\/10     { background-color: rgba(26, 158, 122, 0.10) !important; }
+.border-neon-green\/20 { border-color: rgba(26, 158, 122, 0.22) !important; }
+
+/* Score colors — keep red/yellow but darken to remain readable on light bg */
+.text-green-400        { color: #128A66 !important; }
+.text-green-300        { color: #128A66 !important; }
+.text-green-200        { color: #0E6B52 !important; }
+.text-red-200          { color: #93281F !important; }
+.text-yellow-200       { color: #6B5310 !important; }
+.text-yellow-400       { color: #B8860B !important; }
+.text-yellow-300       { color: #B8860B !important; }
+.text-yellow-200\/80   { color: #6B5310 !important; }
+.text-yellow-200\/90   { color: #6B5310 !important; }
+.text-red-400          { color: #C0392B !important; }
+.text-red-300          { color: #C0392B !important; }
+.text-amber-400        { color: #B8860B !important; }
+.text-amber-300        { color: #B8860B !important; }
+.text-purple-400       { color: var(--tailr-primary) !important; }
+.bg-purple-500\/10     { background-color: rgba(5, 79, 49, 0.08) !important; }
+.bg-purple-500\/20     { background-color: rgba(5, 79, 49, 0.10) !important; }
+.border-purple-500\/20 { border-color: rgba(5, 79, 49, 0.18) !important; }
+.bg-amber-500\/10      { background-color: rgba(184, 134, 11, 0.10) !important; }
+.bg-amber-500\/20      { background-color: rgba(184, 134, 11, 0.18) !important; }
+.border-amber-500\/20  { border-color: rgba(184, 134, 11, 0.20) !important; }
+.bg-yellow-500\/5      { background-color: rgba(184, 134, 11, 0.07) !important; }
+.bg-yellow-500\/10     { background-color: rgba(184, 134, 11, 0.10) !important; }
+.bg-yellow-500\/15     { background-color: rgba(184, 134, 11, 0.16) !important; }
+.border-yellow-500\/10 { border-color: rgba(184, 134, 11, 0.15) !important; }
+.border-yellow-500\/20 { border-color: rgba(184, 134, 11, 0.22) !important; }
+.border-yellow-500\/30 { border-color: rgba(184, 134, 11, 0.30) !important; }
+.bg-red-500\/5         { background-color: rgba(192, 57, 43, 0.06) !important; }
+.bg-red-500\/10        { background-color: rgba(192, 57, 43, 0.10) !important; }
+.bg-red-500\/15        { background-color: rgba(192, 57, 43, 0.15) !important; }
+.border-red-500\/20    { border-color: rgba(192, 57, 43, 0.22) !important; }
+.border-red-500\/30    { border-color: rgba(192, 57, 43, 0.30) !important; }
+.border-red-500\/40    { border-color: rgba(192, 57, 43, 0.40) !important; }
+.bg-green-500\/10      { background-color: rgba(18, 138, 102, 0.10) !important; }
+.bg-green-500\/20      { background-color: rgba(18, 138, 102, 0.18) !important; }
+.border-green-500\/20  { border-color: rgba(18, 138, 102, 0.20) !important; }
+.border-green-500\/30  { border-color: rgba(18, 138, 102, 0.30) !important; }
+.hover\:bg-red-500\/10:hover { background-color: rgba(192, 57, 43, 0.10) !important; }
+
+/* PDF preview iframe — keep an opaque white background regardless of theme */
+.bg-white              { background-color: #FFFFFF !important; }
+
+/* `bg-transparent` should remain transparent (Tailwind keeps this; nothing to override) */

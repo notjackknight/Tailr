@@ -12,9 +12,9 @@ export function cn(...inputs: ClassValue[]) {
 
 /** Map a fit score (1-10) to a color string. */
 export function scoreColor(score: number): string {
-    if (score >= 8) return '#32D74B';
-    if (score >= 6) return '#FFD60A';
-    return '#FF453A';
+    if (score >= 8) return '#1A9E7A';   // mid teal
+    if (score >= 6) return '#B8860B';   // dark gold
+    return '#C0392B';                   // dark red
 }
 
 /** Map a fit score (1-10) to a Tailwind text class. */

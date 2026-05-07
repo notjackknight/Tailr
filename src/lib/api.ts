@@ -51,7 +51,11 @@ export function clearConfigCache(): void {
 
 export async function fetchProfile(): Promise<UserProfile> {
     const res = await fetch('/api/profile');
-    if (!res.ok) throw new Error('Failed to load profile');
+    if (!res.ok) {
+        // Non-fatal — fall back to an empty profile so the UI can render its
+        // empty state (e.g. on first run before a profile has been created).
+        return { name: '', location: '', phone: '', email: '', links: [] };
+    }
     return res.json();
 }
 
@@ -69,7 +73,15 @@ export async function saveProfile(profile: UserProfile): Promise<void> {
 
 export async function fetchPreferences(): Promise<UserPreferences> {
     const res = await fetch('/api/preferences');
-    if (!res.ok) throw new Error('Failed to load preferences');
+    if (!res.ok) {
+        // Non-fatal — fall back to defaults so the UI can render its empty state.
+        return {
+            tone: 'professional',
+            targetPageLength: 1,
+            pinnedExperience: [],
+            additionalGuidance: '',
+        };
+    }
     return res.json();
 }
 
@@ -89,6 +101,22 @@ export async function fetchHistory(): Promise<HistoryEntry[]> {
     const res = await fetch('/api/history');
     if (!res.ok) throw new Error('Failed to load history');
     return res.json();
+}
+
+/**
+ * Safely parse a JSON-encoded string field returned from the server.
+ * Some HistoryEntry fields (`stretch_areas`, `ats_keywords`) come over the wire
+ * as JSON-encoded strings. Parsing in the API layer keeps `JSON.parse` out of
+ * render code and centralizes the fallback behavior.
+ */
+export function parseJsonArray<T = string>(value: string | undefined | null): T[] {
+    if (!value) return [];
+    try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
 }
 
 export async function deleteGeneration(id: number): Promise<void> {

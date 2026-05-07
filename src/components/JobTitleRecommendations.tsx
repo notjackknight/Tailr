@@ -1,8 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GlassCard } from './ui/GlassCard';
-import { Briefcase, RefreshCw, TrendingUp } from 'lucide-react';
+import { SectionHeader } from './ui/SectionHeader';
+import { Skeleton } from './ui/Skeleton';
+import { EmptyState } from './ui/EmptyState';
+import { Briefcase, RefreshCw, TrendingUp, Copy, Check, ExternalLink } from 'lucide-react';
 import { fetchJobTitles, regenerateJobTitles } from '../lib/api';
+import { toast } from './ui/Toast';
 import type { JobTitleResult } from '../../shared/types';
 
 interface Props {
@@ -13,6 +17,7 @@ export const JobTitleRecommendations = ({ masterResumeVersion }: Props) => {
     const [data, setData] = useState<JobTitleResult | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [copiedTitle, setCopiedTitle] = useState<string | null>(null);
 
     const loadTitles = useCallback(async () => {
         try {
@@ -31,113 +36,149 @@ export const JobTitleRecommendations = ({ masterResumeVersion }: Props) => {
         try {
             const result = await regenerateJobTitles();
             setData(result);
+            toast.success('Job titles refreshed');
         } catch (err: any) {
-            setError(err.message || 'Failed to generate');
+            const msg = err.message || 'Failed to generate';
+            setError(msg);
+            toast.error(msg);
         } finally {
             setIsLoading(false);
         }
     }, []);
 
-    // Initial load
     useEffect(() => {
         loadTitles();
     }, [loadTitles]);
 
-    // Auto-regenerate when masterResumeVersion changes (skip initial)
     useEffect(() => {
         if (masterResumeVersion > 0) {
             regenerate();
         }
     }, [masterResumeVersion, regenerate]);
 
-    return (
-        <GlassCard className="space-y-4">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center border border-amber-500/20">
-                        <Briefcase className="text-amber-400" size={20} />
-                    </div>
-                    <div>
-                        <h3 className="text-lg font-bold text-white">Recommended Job Titles</h3>
-                        <p className="text-xs text-gray-500">Top 10 search keywords based on your resume</p>
-                    </div>
-                </div>
-                <button
-                    onClick={regenerate}
-                    disabled={isLoading}
-                    className="p-2 rounded-xl hover:bg-white/5 transition-colors disabled:opacity-50"
-                    title="Refresh recommendations"
-                >
-                    <RefreshCw
-                        size={16}
-                        className={`text-gray-400 ${isLoading ? 'animate-spin' : ''}`}
-                    />
-                </button>
-            </div>
+    const handleCopy = async (title: string) => {
+        try {
+            await navigator.clipboard.writeText(title);
+            setCopiedTitle(title);
+            toast.success('Copied');
+            setTimeout(() => setCopiedTitle(null), 1600);
+        } catch {
+            toast.error('Could not access clipboard');
+        }
+    };
 
-            {/* Error */}
+    return (
+        <GlassCard radius="lg" padding="md" className="space-y-4">
+            <SectionHeader
+                icon={<Briefcase size={18} />}
+                title="Recommended job titles"
+                subtitle="Search keywords based on your resume"
+                accent="amber"
+                as="h3"
+                action={
+                    <button
+                        onClick={regenerate}
+                        disabled={isLoading}
+                        className="p-1.5 rounded-lg hover:bg-white/5 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4F00]"
+                        title="Refresh recommendations"
+                        aria-label="Refresh recommendations"
+                    >
+                        <RefreshCw
+                            size={14}
+                            className={`text-gray-400 ${isLoading ? 'animate-spin' : ''}`}
+                        />
+                    </button>
+                }
+            />
+
             {error && (
-                <div className="px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400">
+                <div className="px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-400">
                     ⚠ {error}
                 </div>
             )}
 
-            {/* Loading */}
             {isLoading && (
-                <div className="space-y-2 animate-pulse">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                        <div key={i} className="h-12 bg-white/5 rounded-xl" />
+                <div className="space-y-2">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                        <Skeleton key={i} className="h-10" />
                     ))}
                 </div>
             )}
 
-            {/* Empty State */}
             {!isLoading && !data?.titles?.length && !error && (
-                <div className="text-center py-8">
-                    <TrendingUp className="mx-auto text-gray-600 mb-3" size={32} />
-                    <p className="text-sm text-gray-500 mb-3">No recommendations yet</p>
-                    <button
-                        onClick={regenerate}
-                        className="text-sm text-amber-400 hover:text-amber-300 font-medium transition-colors"
-                    >
-                        Generate from your master resume →
-                    </button>
-                </div>
+                <EmptyState
+                    icon={<TrendingUp size={22} />}
+                    title="No recommendations yet"
+                    description="Generate suggestions from your master resume."
+                    size="sm"
+                    action={
+                        <button
+                            onClick={regenerate}
+                            className="text-sm text-amber-400 hover:text-amber-300 font-medium transition-colors"
+                        >
+                            Generate from your master resume →
+                        </button>
+                    }
+                />
             )}
 
-            {/* Results */}
             {!isLoading && data && data.titles.length > 0 && (
-                <div className="space-y-2">
-                    <div className="max-h-[340px] overflow-y-auto space-y-2 pr-1">
+                <div className="space-y-3">
+                    {/* Title list with chips */}
+                    <ul className="space-y-1.5">
                         <AnimatePresence>
-                            {data.titles.map((item, i) => (
-                                <motion.div
-                                    key={item.title}
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: i * 0.05 }}
-                                    className="flex items-start gap-3 p-3 bg-white/[0.03] border border-white/5 rounded-xl hover:bg-white/[0.05] transition-colors group"
-                                >
-                                    <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center text-xs font-bold text-amber-400 shrink-0 mt-0.5">
-                                        {i + 1}
-                                    </div>
-                                    <div className="min-w-0">
-                                        <span className="text-sm font-semibold text-white block">{item.title}</span>
-                                        <span className="text-xs text-gray-500 line-clamp-2">{item.reasoning}</span>
-                                    </div>
-                                </motion.div>
-                            ))}
+                            {data.titles.map((item, i) => {
+                                const linkedinUrl = `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(item.title)}`;
+                                return (
+                                    <motion.li
+                                        key={item.title}
+                                        initial={{ opacity: 0, x: -8 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: i * 0.04 }}
+                                        className="flex items-start gap-3 p-2.5 bg-white/[0.03] border border-white/5 rounded-xl hover:bg-white/[0.05] transition-colors group"
+                                    >
+                                        <div className="w-6 h-6 rounded-md bg-amber-500/10 flex items-center justify-center text-[11px] font-bold text-amber-400 shrink-0 mt-0.5">
+                                            {i + 1}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <span className="text-sm font-semibold text-white block">
+                                                {item.title}
+                                            </span>
+                                            <span className="text-xs text-gray-400">{item.reasoning}</span>
+                                        </div>
+                                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleCopy(item.title)}
+                                                className="p-1.5 rounded-md hover:bg-white/10 text-gray-400 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4F00]"
+                                                title="Copy title"
+                                                aria-label={`Copy ${item.title}`}
+                                            >
+                                                {copiedTitle === item.title ? (
+                                                    <Check size={12} className="text-green-400" />
+                                                ) : (
+                                                    <Copy size={12} />
+                                                )}
+                                            </button>
+                                            <a
+                                                href={linkedinUrl}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="p-1.5 rounded-md hover:bg-white/10 text-gray-400 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4F00]"
+                                                title="Search on LinkedIn"
+                                                aria-label={`Search ${item.title} on LinkedIn`}
+                                            >
+                                                <ExternalLink size={12} />
+                                            </a>
+                                        </div>
+                                    </motion.li>
+                                );
+                            })}
                         </AnimatePresence>
-                    </div>
-
-                    {data.titles.length > 5 && (
-                        <p className="text-[10px] text-gray-500 text-center">
-                            Scroll to see all {data.titles.length} titles
-                        </p>
-                    )}
+                    </ul>
 
                     {data.generatedAt && (
-                        <p className="text-[10px] text-gray-600 text-right mt-2">
+                        <p className="text-[10px] text-gray-600 text-right">
                             Generated {new Date(data.generatedAt).toLocaleDateString()}
                         </p>
                     )}

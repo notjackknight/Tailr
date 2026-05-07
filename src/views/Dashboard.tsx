@@ -2,31 +2,33 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
-import { ScoreRing } from '../components/ui/ScoreRing';
+import { SectionHeader } from '../components/ui/SectionHeader';
+import { EmptyState } from '../components/ui/EmptyState';
+import { Skeleton } from '../components/ui/Skeleton';
 import { PdfPreviewModal } from '../components/modals/PdfPreviewModal';
 import { AnalysisModal } from '../components/modals/AnalysisModal';
 import { MasterResumeModal } from '../components/modals/MasterResumeModal';
 import { OutreachGenerator } from '../components/OutreachGenerator';
 import { JobTitleRecommendations } from '../components/JobTitleRecommendations';
+import { VaultCard } from '../components/VaultCard';
 import {
     FileText,
     Clock,
-    Download,
-    Trash2,
-    Eye,
     Upload as UploadIcon,
     BarChart3,
     TrendingUp,
     Building2,
     Sparkles,
+    CheckCircle2,
+    Edit3,
 } from 'lucide-react';
-import { downloadResume, formatRelativeDate } from '../lib/utils';
 import {
     fetchHistory,
     deleteGeneration as apiDeleteGeneration,
     fetchMasterResume,
     fetchDashboardStats,
 } from '../lib/api';
+import { toast } from '../components/ui/Toast';
 import type { HistoryEntry, DashboardStats, AppConfig } from '../../shared/types';
 
 import {
@@ -58,25 +60,39 @@ const StatCard = ({
     value,
     icon,
     accent,
+    primary = false,
 }: {
     label: string;
     value: string | number;
     icon: React.ReactNode;
     accent?: string;
+    primary?: boolean;
 }) => (
-    <GlassCard className="flex items-center gap-4 p-5">
+    <GlassCard
+        variant={primary ? 'featured' : 'default'}
+        padding={primary ? 'lg' : 'md'}
+        radius={primary ? 'xl' : 'lg'}
+        className={`flex items-center gap-4 ${primary ? 'sm:col-span-2 lg:col-span-2' : ''}`}
+    >
         <div
-            className="w-12 h-12 rounded-2xl flex items-center justify-center border shrink-0"
+            className="rounded-xl flex items-center justify-center border shrink-0"
             style={{
-                background: `${accent || '#FF4F00'}15`,
-                borderColor: `${accent || '#FF4F00'}30`,
+                width: primary ? 56 : 44,
+                height: primary ? 56 : 44,
+                background: `${accent || '#054F31'}14`,
+                borderColor: `${accent || '#054F31'}28`,
             }}
         >
             {icon}
         </div>
-        <div>
-            <span className="text-xs text-gray-500 uppercase tracking-wider block">{label}</span>
-            <span className="text-2xl font-bold text-white">{value}</span>
+        <div className="min-w-0">
+            <span className="text-[11px] text-gray-500 uppercase tracking-wider block">{label}</span>
+            <span
+                className={`font-bold text-white block truncate ${primary ? 'text-3xl md:text-4xl' : 'text-xl md:text-2xl'}`}
+                title={String(value)}
+            >
+                {value}
+            </span>
         </div>
     </GlassCard>
 );
@@ -90,7 +106,7 @@ interface DashboardProps {
 export const Dashboard = ({ config, hasApiKey, onConfigChange }: DashboardProps) => {
     const [history, setHistory] = useState<HistoryEntry[]>([]);
     const [loading, setLoading] = useState(true);
-    const [previewPdf, setPreviewPdf] = useState<string | null>(null);
+    const [previewEntry, setPreviewEntry] = useState<HistoryEntry | null>(null);
     const [analysisEntry, setAnalysisEntry] = useState<HistoryEntry | null>(null);
     const [stats, setStats] = useState<DashboardStats | null>(null);
 
@@ -120,15 +136,18 @@ export const Dashboard = ({ config, hasApiKey, onConfigChange }: DashboardProps)
 
     useEffect(() => { loadData(); }, [loadData]);
 
-    const handleDelete = async (id: number) => {
+    const handleDelete = async (entry: HistoryEntry) => {
         try {
-            await apiDeleteGeneration(id);
-            setHistory((prev) => prev.filter((h) => h.id !== id));
+            await apiDeleteGeneration(entry.id);
+            setHistory((prev) => prev.filter((h) => h.id !== entry.id));
+            toast.success(`Deleted resume for ${entry.company}`);
             try {
                 const statsData = await fetchDashboardStats();
                 setStats(statsData);
             } catch { /* non-critical */ }
-        } catch { /* swallow — user can retry */ }
+        } catch {
+            toast.error('Failed to delete generation. Please try again.');
+        }
     };
 
     const handleOpenMaster = async () => {
@@ -158,13 +177,13 @@ export const Dashboard = ({ config, hasApiKey, onConfigChange }: DashboardProps)
             datasets: [{
                 label: 'Fit Score',
                 data: stats.scoreTrend.map((d) => d.score),
-                borderColor: '#FF4F00',
-                backgroundColor: 'rgba(255, 79, 0, 0.1)',
+                borderColor: '#1A9E7A',
+                backgroundColor: 'rgba(26, 158, 122, 0.12)',
                 fill: true,
                 tension: 0.4,
                 pointRadius: 4,
-                pointBackgroundColor: '#FF4F00',
-                pointBorderColor: '#0A0A0A',
+                pointBackgroundColor: '#1A9E7A',
+                pointBorderColor: '#FFFFFF',
                 pointBorderWidth: 2,
             }],
         }
@@ -175,8 +194,8 @@ export const Dashboard = ({ config, hasApiKey, onConfigChange }: DashboardProps)
             labels: stats.roleDistribution.map((d) => d.role),
             datasets: [{
                 data: stats.roleDistribution.map((d) => d.count),
-                backgroundColor: ['#FF4F00', '#32D74B', '#FFD60A', '#5E5CE6', '#FF375F', '#30D158', '#64D2FF', '#BF5AF2'],
-                borderColor: '#0A0A0A',
+                backgroundColor: ['#054F31', '#1A9E7A', '#34D8B4', '#A7F3E0', '#0E4D40', '#526e7d', '#7A8B92', '#BCC9C5'],
+                borderColor: '#FFFFFF',
                 borderWidth: 2,
             }],
         }
@@ -188,14 +207,14 @@ export const Dashboard = ({ config, hasApiKey, onConfigChange }: DashboardProps)
         plugins: {
             legend: { display: false },
             tooltip: {
-                backgroundColor: '#1a1a1a', titleColor: '#fff', bodyColor: '#ccc',
-                borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+                backgroundColor: '#0F1F1A', titleColor: '#FFFFFF', bodyColor: '#E6ECEA',
+                borderColor: 'rgba(5, 79, 49, 0.20)', borderWidth: 1,
                 cornerRadius: 12, padding: 12,
             },
         },
         scales: {
-            x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#666', font: { size: 11 } } },
-            y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#666', font: { size: 11 } }, min: 0, max: 10 },
+            x: { grid: { color: 'rgba(82, 110, 125, 0.10)' }, ticks: { color: '#526e7d', font: { size: 11 } } },
+            y: { grid: { color: 'rgba(82, 110, 125, 0.10)' }, ticks: { color: '#526e7d', font: { size: 11 } }, min: 0, max: 10 },
         },
     };
 
@@ -205,67 +224,137 @@ export const Dashboard = ({ config, hasApiKey, onConfigChange }: DashboardProps)
         plugins: {
             legend: {
                 position: 'bottom' as const,
-                labels: { color: '#999', font: { size: 11 }, padding: 16, usePointStyle: true },
+                labels: { color: '#526e7d', font: { size: 12 }, padding: 16, usePointStyle: true },
             },
             tooltip: {
-                backgroundColor: '#1a1a1a', titleColor: '#fff', bodyColor: '#ccc',
-                borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+                backgroundColor: '#0F1F1A', titleColor: '#FFFFFF', bodyColor: '#E6ECEA',
+                borderColor: 'rgba(5, 79, 49, 0.20)', borderWidth: 1,
                 cornerRadius: 12, padding: 12,
             },
         },
         cutout: '65%',
     };
 
+    const hasGenerations = stats && stats.totalGenerations > 0;
+    const showInsights = stats && (stats.scoreTrend.length > 1 || stats.roleDistribution.length > 0);
+
     return (
-        <div className="space-y-8 flex-1">
+        <div className="space-y-6 md:space-y-8 flex-1">
             <header className="flex items-end justify-between flex-wrap gap-3">
                 <div>
-                    <h1 className="text-4xl font-bold tracking-tight text-white mb-2">Dashboard</h1>
-                    <p className="text-gray-400">
-                        {masterResumePresent ? 'Your master resume is ready to tailor.' : 'Start by uploading your master resume.'}
+                    <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white mb-1.5">
+                        Library
+                    </h1>
+                    <p className="text-sm md:text-base text-gray-400">
+                        {masterResumePresent
+                            ? 'Your master resume is ready. Tailor it for any job.'
+                            : 'Upload your master resume to start tailoring.'}
                     </p>
                 </div>
-                <Button
-                    variant={masterResumePresent ? 'secondary' : 'primary'}
-                    icon={<UploadIcon size={16} className="shrink-0" />}
-                    onClick={handleOpenMaster}
-                >
-                    {masterResumePresent ? 'Update Master' : 'Upload Master Resume'}
-                </Button>
             </header>
 
-            {/* Stats Cards */}
-            {stats && stats.totalGenerations > 0 && (
+            {/* ── Master Resume hero card ────────────────────────────── */}
+            <GlassCard variant="featured" radius="xl" padding="lg">
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div className="flex items-start gap-4 min-w-0">
+                        <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10 shrink-0">
+                            <FileText className="text-white/80" size={28} />
+                        </div>
+                        <div className="min-w-0">
+                            <h2 className="text-lg md:text-xl font-semibold text-white">
+                                Master resume
+                            </h2>
+                            <div className="flex items-center gap-2 mt-1.5 text-xs md:text-sm">
+                                {masterResumePresent ? (
+                                    <span className="inline-flex items-center gap-1 text-green-300">
+                                        <CheckCircle2 size={14} />
+                                        Ready for tailoring
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center gap-1 text-yellow-300">
+                                        <Clock size={14} />
+                                        Not yet uploaded
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <Button
+                        variant={masterResumePresent ? 'secondary' : 'primary'}
+                        size="md"
+                        icon={masterResumePresent ? <Edit3 size={16} /> : <UploadIcon size={16} />}
+                        onClick={handleOpenMaster}
+                        className="w-full md:w-auto"
+                    >
+                        {masterResumePresent ? 'Edit master' : 'Upload master resume'}
+                    </Button>
+                </div>
+            </GlassCard>
+
+            {/* ── Stats Cards (only when there are generations) ──────── */}
+            {hasGenerations && (
                 <motion.div
-                    initial={{ opacity: 0, y: 10 }}
+                    initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="grid grid-cols-2 lg:grid-cols-4 gap-4"
+                    className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4"
                 >
-                    <StatCard label="Total Resumes" value={stats.totalGenerations} icon={<FileText size={20} className="text-[#FF4F00]" />} accent="#FF4F00" />
-                    <StatCard label="Avg Fit Score" value={stats.averageScore} icon={<TrendingUp size={20} className="text-[#32D74B]" />} accent="#32D74B" />
-                    <StatCard label="Top Company" value={stats.topCompany} icon={<Building2 size={20} className="text-[#5E5CE6]" />} accent="#5E5CE6" />
-                    <StatCard label="Master Resume" value={masterResumePresent ? 'Ready' : 'Missing'} icon={<Sparkles size={20} className="text-[#FFD60A]" />} accent="#FFD60A" />
+                    <StatCard
+                        label="Total resumes"
+                        value={stats!.totalGenerations}
+                        icon={<FileText size={22} style={{ color: '#054F31' }} />}
+                        accent="#054F31"
+                        primary
+                    />
+                    <StatCard
+                        label="Avg fit score"
+                        value={stats!.averageScore}
+                        icon={<TrendingUp size={20} style={{ color: '#1A9E7A' }} />}
+                        accent="#1A9E7A"
+                    />
+                    <StatCard
+                        label="Top company"
+                        value={stats!.topCompany}
+                        icon={<Building2 size={20} style={{ color: '#0E4D40' }} />}
+                        accent="#0E4D40"
+                    />
+                    <StatCard
+                        label="Status"
+                        value={masterResumePresent ? 'Ready' : 'Setup'}
+                        icon={<Sparkles size={20} style={{ color: '#34D8B4' }} />}
+                        accent="#34D8B4"
+                    />
                 </motion.div>
             )}
 
-            {/* Charts Row */}
-            {stats && (stats.scoreTrend.length > 1 || stats.roleDistribution.length > 0) && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {scoreTrendData && stats.scoreTrend.length > 1 && (
-                        <GlassCard className="p-5">
-                            <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-                                <BarChart3 size={16} className="text-[#FF4F00]" /> Score Trend
-                            </h3>
+            {/* ── Charts row ─────────────────────────────────────────── */}
+            {showInsights && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
+                    {scoreTrendData && stats!.scoreTrend.length > 1 && (
+                        <GlassCard padding="md" radius="lg">
+                            <SectionHeader
+                                icon={<BarChart3 size={16} />}
+                                title="Score trend"
+                                subtitle="Your fit score over time"
+                                accent="tailr"
+                                as="h3"
+                                className="mb-4"
+                            />
                             <div className="h-52">
                                 <Line data={scoreTrendData} options={chartOptions} />
                             </div>
                         </GlassCard>
                     )}
-                    {roleDistData && stats.roleDistribution.length > 0 && (
-                        <GlassCard className="p-5">
-                            <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-                                <BarChart3 size={16} className="text-[#32D74B]" /> Role Distribution
-                            </h3>
+                    {roleDistData && stats!.roleDistribution.length > 0 && (
+                        <GlassCard padding="md" radius="lg">
+                            <SectionHeader
+                                icon={<BarChart3 size={16} />}
+                                title="Role distribution"
+                                subtitle="Where you've been tailoring"
+                                accent="green"
+                                as="h3"
+                                className="mb-4"
+                            />
                             <div className="h-52">
                                 <Doughnut data={roleDistData} options={doughnutOptions} />
                             </div>
@@ -274,127 +363,82 @@ export const Dashboard = ({ config, hasApiKey, onConfigChange }: DashboardProps)
                 </div>
             )}
 
-            {/* Outreach + JobTitles need both a master resume and an API key */}
+            {/* ── Outreach + JobTitles need both a master resume and an API key ── */}
             {masterResumePresent && hasApiKey && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
                     <JobTitleRecommendations masterResumeVersion={masterResumeVersion} />
                     <OutreachGenerator />
                 </div>
             )}
 
-            {/* Vault */}
-            <div className="pt-4 border-t border-white/5">
-                <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-                    <FileText size={24} className="text-gray-400" />
-                    The Vault
-                </h2>
-
-                <GlassCard className="relative overflow-hidden group mb-6">
-                    <div className="absolute top-0 right-0 p-32 bg-gradient-tailr opacity-5 blur-[100px] rounded-full pointer-events-none" />
-                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
-                        <div className="flex items-start gap-4">
-                            <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10 shrink-0">
-                                <FileText className="text-white/80" size={32} />
-                            </div>
-                            <div>
-                                <h3 className="text-xl font-semibold text-white">Master Resume</h3>
-                                <div className="flex items-center gap-3 mt-2 text-sm text-gray-400">
-                                    <span className="flex items-center gap-1">
-                                        <Clock size={12} className="shrink-0" />
-                                        {masterResumePresent ? 'Available for Tailoring' : 'Not yet uploaded'}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-8 w-full md:w-auto">
-                            <div className="flex flex-col items-center">
-                                <span className="text-xs uppercase tracking-wider text-gray-500 mb-1">Status</span>
-                                <span className={`text-2xl font-bold ${masterResumePresent ? 'text-neon-green' : 'text-gray-500'}`}>
-                                    {masterResumePresent ? 'Ready' : 'Empty'}
-                                </span>
-                            </div>
-                            <div className="h-10 w-px bg-white/10 hidden md:block" />
-                            <Button variant="ghost" className="hidden md:flex" onClick={handleOpenMaster}>
-                                {masterResumePresent ? 'Edit Master' : 'Upload'}
-                            </Button>
-                        </div>
-                    </div>
-                </GlassCard>
+            {/* ── Vault ──────────────────────────────────────────────── */}
+            <div className="pt-2">
+                <SectionHeader
+                    icon={<FileText size={18} />}
+                    title="Tailored resumes"
+                    subtitle={
+                        history.length > 0
+                            ? `${history.length} ${history.length === 1 ? 'resume' : 'resumes'} in your vault`
+                            : 'No resumes yet'
+                    }
+                    as="h2"
+                    className="mb-4"
+                />
 
                 {!loading && history.length === 0 && (
-                    <GlassCard className="text-center py-16">
-                        <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/10">
-                            <FileText className="text-gray-500" size={28} />
-                        </div>
-                        <h3 className="text-lg font-semibold text-white mb-2">No resumes yet</h3>
-                        <p className="text-gray-500 text-sm">
-                            {masterResumePresent
-                                ? 'Head to the Studio to generate your first tailored resume.'
-                                : 'Upload your master resume above to get started.'}
-                        </p>
+                    <GlassCard padding="lg" radius="lg">
+                        <EmptyState
+                            icon={<FileText size={28} />}
+                            title="No tailored resumes yet"
+                            description={
+                                masterResumePresent
+                                    ? 'Head to Tailor to generate your first resume.'
+                                    : 'Upload your master resume above to get started.'
+                            }
+                        />
                     </GlassCard>
                 )}
 
                 {loading && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                         {[1, 2, 3].map((i) => (
-                            <GlassCard key={i} className="animate-pulse">
-                                <div className="h-4 bg-white/10 rounded w-3/4 mb-3" />
-                                <div className="h-3 bg-white/5 rounded w-1/2 mb-6" />
-                                <div className="h-3 bg-white/5 rounded w-full" />
+                            <GlassCard key={i} padding="md" radius="lg">
+                                <Skeleton className="h-9 w-9 mb-3" rounded="full" />
+                                <Skeleton className="h-4 w-3/4 mb-2" />
+                                <Skeleton className="h-3 w-1/2 mb-4" />
+                                <Skeleton className="h-3 w-full" />
                             </GlassCard>
                         ))}
                     </div>
                 )}
 
                 {!loading && history.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                         {history.map((entry) => (
-                            <GlassCard key={entry.id} hoverEffect className="group relative">
-                                <div className="flex justify-between items-start mb-4">
-                                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-lg font-bold border border-white/10">
-                                        {entry.company[0]?.toUpperCase()}
-                                    </div>
-                                    <ScoreRing score={entry.score} size={48} strokeWidth={4} />
-                                </div>
-
-                                <h3 className="font-bold text-lg mb-1 text-white leading-tight">{entry.role}</h3>
-                                <p className="text-gray-400 text-sm mb-4">{entry.company}</p>
-
-                                <div className="flex items-center justify-between pt-4 border-t border-white/5">
-                                    <span className="text-xs text-gray-500 flex items-center gap-1">
-                                        <Clock size={12} className="shrink-0" />
-                                        {formatRelativeDate(entry.created_at)}
-                                    </span>
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => setAnalysisEntry(entry)} className="p-2 hover:bg-white/10 rounded-lg transition-colors" title="View Analysis" aria-label="View analysis">
-                                            <BarChart3 size={14} className="text-gray-400 hover:text-white" />
-                                        </button>
-                                        <button onClick={() => setPreviewPdf(entry.pdf_filename)} className="p-2 hover:bg-white/10 rounded-lg transition-colors" title="Preview" aria-label="Preview PDF">
-                                            <Eye size={14} className="text-gray-400 hover:text-white" />
-                                        </button>
-                                        <button onClick={() => downloadResume(entry.pdf_filename, entry.company, 'pdf', contactName)} className="p-2 hover:bg-white/10 rounded-lg transition-colors flex items-center gap-1" title="Download PDF" aria-label="Download PDF">
-                                            <span className="text-[10px] font-bold text-gray-400">PDF</span>
-                                            <Download size={14} className="text-gray-400 hover:text-white" />
-                                        </button>
-                                        <button onClick={() => downloadResume(entry.pdf_filename, entry.company, 'docx', contactName)} className="p-2 hover:bg-white/10 rounded-lg transition-colors flex items-center gap-1" title="Download DOCX" aria-label="Download DOCX">
-                                            <span className="text-[10px] font-bold text-gray-400">DOCX</span>
-                                            <Download size={14} className="text-gray-400 hover:text-white" />
-                                        </button>
-                                        <button onClick={() => handleDelete(entry.id)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete" aria-label="Delete generation">
-                                            <Trash2 size={14} className="text-gray-400 hover:text-red-400" />
-                                        </button>
-                                    </div>
-                                </div>
-                            </GlassCard>
+                            <VaultCard
+                                key={entry.id}
+                                entry={entry}
+                                contactName={contactName}
+                                onAnalysis={setAnalysisEntry}
+                                onPreview={setPreviewEntry}
+                                onDelete={handleDelete}
+                            />
                         ))}
                     </div>
                 )}
             </div>
 
             <AnimatePresence>
-                {previewPdf && <PdfPreviewModal pdfFilename={previewPdf} onClose={() => setPreviewPdf(null)} />}
+                {previewEntry && (
+                    <PdfPreviewModal
+                        pdfFilename={previewEntry.pdf_filename}
+                        company={previewEntry.company}
+                        role={previewEntry.role}
+                        score={previewEntry.score}
+                        contactName={contactName}
+                        onClose={() => setPreviewEntry(null)}
+                    />
+                )}
             </AnimatePresence>
 
             <AnimatePresence>

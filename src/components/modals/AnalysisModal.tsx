@@ -1,12 +1,18 @@
 /**
  * AnalysisModal — Shows fit analysis for a vault history entry.
  * Displays score, reasoning, ATS keywords, and stretch areas.
+ *
+ * JSON fields (`stretch_areas`, `ats_keywords`) are pre-parsed via the shared
+ * api helper so this component never calls JSON.parse directly.
  */
 
-import React from 'react';
-import { motion } from 'motion/react';
-import { X, Target, Tag, AlertTriangle } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { Target, Tag, AlertTriangle, Sparkles, Copy, Check } from 'lucide-react';
 import { ScoreRing } from '../ui/ScoreRing';
+import { Modal } from '../ui/Modal';
+import { Button } from '../ui/Button';
+import { parseJsonArray } from '../../lib/api';
+import { toast } from '../ui/Toast';
 
 interface AnalysisModalProps {
     entry: {
@@ -18,104 +24,122 @@ interface AnalysisModalProps {
         ats_keywords: string;
     };
     onClose: () => void;
+    /** Optional callback — wires "Open in Tailor" affordance. */
+    onOpenInStudio?: () => void;
 }
 
-export const AnalysisModal = ({ entry, onClose }: AnalysisModalProps) => {
-    // Parse JSON strings
-    let stretchAreas: string[] = [];
-    let atsKeywords: string[] = [];
-    try { stretchAreas = JSON.parse(entry.stretch_areas || '[]'); } catch { /* empty */ }
-    try { atsKeywords = JSON.parse(entry.ats_keywords || '[]'); } catch { /* empty */ }
+export const AnalysisModal = ({ entry, onClose, onOpenInStudio }: AnalysisModalProps) => {
+    const stretchAreas = useMemo(() => parseJsonArray<string>(entry.stretch_areas), [entry.stretch_areas]);
+    const atsKeywords = useMemo(() => parseJsonArray<string>(entry.ats_keywords), [entry.ats_keywords]);
+
+    const [copied, setCopied] = React.useState(false);
+
+    const handleCopyKeywords = async () => {
+        try {
+            await navigator.clipboard.writeText(atsKeywords.join(', '));
+            setCopied(true);
+            toast.success('Keywords copied');
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            toast.error('Could not access clipboard');
+        }
+    };
 
     return (
-        <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
-            onClick={onClose}
+        <Modal
+            onClose={onClose}
+            title={entry.role}
+            subtitle={entry.company}
+            maxWidth="max-w-3xl"
+            footer={
+                onOpenInStudio && (
+                    <div className="flex justify-end">
+                        <Button
+                            variant="primary"
+                            size="md"
+                            icon={<Sparkles size={14} />}
+                            onClick={onOpenInStudio}
+                        >
+                            Open in Tailor
+                        </Button>
+                    </div>
+                )
+            }
         >
-            <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                className="w-full max-w-2xl max-h-[85vh] bg-[#0A0A0A] rounded-3xl overflow-hidden border border-white/10 flex flex-col shadow-2xl"
-                onClick={(e) => e.stopPropagation()}
-            >
-                {/* Header */}
-                <div className="p-5 flex justify-between items-center border-b border-white/10 bg-white/[0.02] shrink-0">
+            <div className="p-5 md:p-7 space-y-6">
+                <div className="flex flex-col sm:flex-row items-center gap-5 pb-5 border-b border-white/5">
+                    <ScoreRing score={entry.score} size={92} strokeWidth={6} />
+                    <div className="text-center sm:text-left">
+                        <span className="text-xl md:text-2xl font-bold text-white block leading-tight">
+                            Fit score {entry.score}/10
+                        </span>
+                        <p className="text-xs md:text-sm text-gray-400 mt-1">
+                            {entry.score >= 8
+                                ? 'Strong match — this resume should perform well in ATS and recruiter screens.'
+                                : entry.score >= 6
+                                ? 'Decent match — review the stretch areas before applying.'
+                                : 'Weak match — consider another role or strengthening the stretch areas.'}
+                        </p>
+                    </div>
+                </div>
+
+                {entry.reasoning && (
                     <div>
-                        <h3 className="text-lg font-bold text-white">{entry.role}</h3>
-                        <p className="text-sm text-gray-400">{entry.company}</p>
+                        <h4 className="text-[11px] uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1.5">
+                            <Target size={12} /> Why this fits
+                        </h4>
+                        <p className="text-sm md:text-base text-gray-300 leading-relaxed">
+                            {entry.reasoning}
+                        </p>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-                        <X size={16} className="text-white" />
-                    </button>
-                </div>
+                )}
 
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-8 space-y-8">
-                    {/* Score Ring */}
-                    <div className="flex flex-col items-center gap-4 pb-8 border-b border-white/5">
-                        <ScoreRing score={entry.score} size={100} strokeWidth={6} />
-                        <div className="text-center">
-                            <span className="text-2xl font-bold text-white block">Fit Score</span>
-                            <span className="text-sm text-gray-500">{entry.score}/10 match</span>
+                {atsKeywords.length > 0 && (
+                    <div>
+                        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                            <h4 className="text-[11px] uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                                <Tag size={12} /> ATS keywords matched ({atsKeywords.length})
+                            </h4>
+                            <button
+                                onClick={handleCopyKeywords}
+                                className="text-[11px] text-gray-400 hover:text-white inline-flex items-center gap-1 transition-colors"
+                            >
+                                {copied ? <Check size={11} className="text-green-400" /> : <Copy size={11} />}
+                                {copied ? 'Copied' : 'Copy all'}
+                            </button>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                            {atsKeywords.map((kw, i) => (
+                                <span
+                                    key={i}
+                                    className="px-2.5 py-1 text-xs font-medium rounded-full bg-neon-green/10 text-neon-green border border-neon-green/20"
+                                >
+                                    {kw}
+                                </span>
+                            ))}
                         </div>
                     </div>
+                )}
 
-                    {/* Reasoning */}
-                    {entry.reasoning && (
-                        <div>
-                            <h4 className="text-xs uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-2">
-                                <Target size={14} /> Analysis
-                            </h4>
-                            <p className="text-base text-gray-300 leading-relaxed">
-                                {entry.reasoning}
-                            </p>
+                {stretchAreas.length > 0 && (
+                    <div>
+                        <h4 className="text-[11px] uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1.5">
+                            <AlertTriangle size={12} /> Stretch areas ({stretchAreas.length})
+                        </h4>
+                        <div className="space-y-2">
+                            {stretchAreas.map((area, i) => (
+                                <div
+                                    key={i}
+                                    className="flex items-start gap-2 p-3 bg-yellow-500/5 border border-yellow-500/10 rounded-xl"
+                                >
+                                    <AlertTriangle size={12} className="mt-0.5 shrink-0 text-yellow-400" />
+                                    <span className="text-sm text-yellow-200/90 leading-relaxed">{area}</span>
+                                </div>
+                            ))}
                         </div>
-                    )}
-
-                    {/* ATS Keywords */}
-                    {atsKeywords.length > 0 && (
-                        <div>
-                            <h4 className="text-xs uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
-                                <Tag size={14} /> ATS Keywords Matched
-                            </h4>
-                            <div className="flex flex-wrap gap-2">
-                                {atsKeywords.map((kw, i) => (
-                                    <span
-                                        key={i}
-                                        className="px-3 py-1.5 text-sm font-medium rounded-full bg-neon-green/10 text-neon-green border border-neon-green/20"
-                                    >
-                                        {kw}
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Stretch Areas */}
-                    {stretchAreas.length > 0 && (
-                        <div>
-                            <h4 className="text-xs uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
-                                <AlertTriangle size={14} /> Stretch Areas
-                            </h4>
-                            <div className="space-y-3">
-                                {stretchAreas.map((area, i) => (
-                                    <div
-                                        key={i}
-                                        className="flex items-start gap-3 p-4 bg-yellow-500/5 border border-yellow-500/10 rounded-xl"
-                                    >
-                                        <span className="text-yellow-400 text-sm mt-0.5">⚠</span>
-                                        <span className="text-sm text-yellow-200/80 leading-relaxed">{area}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </motion.div>
-        </motion.div>
+                    </div>
+                )}
+            </div>
+        </Modal>
     );
 };
