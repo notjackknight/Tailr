@@ -7,7 +7,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { GenerationRecord } from '../shared/types.js';
+import type { GenerationRecord, GenerationKind } from '../shared/types.js';
 
 // Re-export for backward compat
 export type { GenerationRecord } from '../shared/types.js';
@@ -35,9 +35,19 @@ export function getDb(): Database.Database {
         pdf_filename TEXT,
         fill_status TEXT,
         iterations INTEGER DEFAULT 1,
+        kind TEXT NOT NULL DEFAULT 'tailored',
+        outreach_dm TEXT DEFAULT '',
         created_at TEXT DEFAULT (datetime('now'))
       )
     `);
+        // Migrations for databases created before later columns existed.
+        const cols = db.prepare(`PRAGMA table_info(generations)`).all() as Array<{ name: string }>;
+        if (!cols.some((c) => c.name === 'kind')) {
+            db.exec(`ALTER TABLE generations ADD COLUMN kind TEXT NOT NULL DEFAULT 'tailored'`);
+        }
+        if (!cols.some((c) => c.name === 'outreach_dm')) {
+            db.exec(`ALTER TABLE generations ADD COLUMN outreach_dm TEXT DEFAULT ''`);
+        }
     }
     return db;
 }
@@ -54,11 +64,13 @@ export function insertGeneration(data: {
     pdfFilename: string;
     fillStatus: string;
     iterations: number;
+    kind?: GenerationKind;
+    outreachDm?: string;
 }): number {
     const db = getDb();
     const stmt = db.prepare(`
-    INSERT INTO generations (company, role, score, reasoning, stretch_areas, ats_keywords, job_description, resume_data_json, pdf_filename, fill_status, iterations)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO generations (company, role, score, reasoning, stretch_areas, ats_keywords, job_description, resume_data_json, pdf_filename, fill_status, iterations, kind, outreach_dm)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
     const result = stmt.run(
         data.company,
@@ -72,6 +84,8 @@ export function insertGeneration(data: {
         data.pdfFilename,
         data.fillStatus,
         data.iterations,
+        data.kind ?? 'tailored',
+        data.outreachDm ?? '',
     );
     return result.lastInsertRowid as number;
 }

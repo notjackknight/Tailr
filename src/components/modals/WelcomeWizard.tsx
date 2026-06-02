@@ -597,7 +597,7 @@ const MasterStep = ({ onComplete }: { onComplete: () => void }) => {
                         </div>
                         <p className="text-base font-semibold text-white mb-1">Resume parsed</p>
                         <p className="text-xs text-gray-500 max-w-xs">
-                            {filename} is now your master resume. You can re-upload at any time from the Library.
+                            {filename} is now your master resume. You can re-upload at any time from the Dashboard.
                         </p>
                     </div>
                 )}

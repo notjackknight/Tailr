@@ -5,13 +5,14 @@ import { SetupBanner, type SetupView } from './components/SetupBanner';
 import { Dashboard } from './views/Dashboard';
 import { Studio } from './views/Studio';
 import { Settings } from './views/Settings';
+import { Vault } from './views/Vault';
 import { fetchConfig } from './lib/api';
 import { hasActiveKey, subscribeApiKey } from './lib/apiKey';
 import { ToastProvider } from './components/ui/Toast';
 import { WelcomeWizard } from './components/modals/WelcomeWizard';
 import type { AppConfig } from '../shared/types';
 
-type View = 'dashboard' | 'studio' | 'settings';
+type View = 'dashboard' | 'studio' | 'settings' | 'vault';
 
 const WIZARD_DISMISSED_KEY = 'tailr.wizardDismissed';
 
@@ -105,9 +106,10 @@ export default function App() {
         setupRemaining={setupRemaining}
       >
         {currentView === 'dashboard' && (
-          <Dashboard config={config} hasApiKey={keyPresent} onConfigChange={refreshConfig} />
+          <Dashboard config={config} hasApiKey={keyPresent} onConfigChange={refreshConfig} onNavigate={setCurrentView} />
         )}
         {currentView === 'studio' && <Studio config={config} hasApiKey={keyPresent} onNavigate={setCurrentView} />}
+        {currentView === 'vault' && <Vault config={config} onNavigate={setCurrentView} />}
         {currentView === 'settings' && <Settings />}
       </AppShell>
 

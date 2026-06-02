@@ -13,6 +13,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { parseJsonArray } from '../../lib/api';
 import { toast } from '../ui/Toast';
+import { ColdDmBlock } from '../ColdDmBlock';
 
 interface AnalysisModalProps {
     entry: {
@@ -22,6 +23,7 @@ interface AnalysisModalProps {
         reasoning: string;
         stretch_areas: string;
         ats_keywords: string;
+        outreach_dm?: string;
     };
     onClose: () => void;
     /** Optional callback — wires "Open in Tailor" affordance. */
@@ -93,6 +95,8 @@ export const AnalysisModal = ({ entry, onClose, onOpenInStudio }: AnalysisModalP
                         </p>
                     </div>
                 )}
+
+                {entry.outreach_dm?.trim() && <ColdDmBlock dm={entry.outreach_dm} />}
 
                 {atsKeywords.length > 0 && (
                     <div>

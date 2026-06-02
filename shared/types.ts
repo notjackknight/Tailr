@@ -150,9 +150,19 @@ export interface GenerationResult {
     pdfFilename: string;
     fillStatus: string;
     iterations: number;
+    kind: GenerationKind;
+    /** Short, human LinkedIn cold DM to send with the resume. '' if none. */
+    outreachDm: string;
 }
 
 // ── Database Record ─────────────────────────────────────────
+/**
+ * Discriminator for what kind of resume a generation represents.
+ * 'tailored'         — written against a specific job description (default)
+ * 'linkedin-default' — broad, recruiter-facing default resume; no JD
+ */
+export type GenerationKind = 'tailored' | 'linkedin-default';
+
 export interface GenerationRecord {
     id: number;
     company: string;
@@ -166,6 +176,8 @@ export interface GenerationRecord {
     pdf_filename: string;
     fill_status: string;
     iterations: number;
+    kind: GenerationKind;
+    outreach_dm: string;
     created_at: string;
 }
 
@@ -196,13 +208,9 @@ export interface HistoryEntry {
     pdf_filename: string;
     fill_status: string;
     iterations: number;
+    kind: GenerationKind;
+    outreach_dm: string;
     created_at: string;
-}
-
-// ── Outreach Generator ─────────────────────────────────────
-export interface OutreachResult {
-    hiringManagers: Array<{ title: string; reasoning: string }>;
-    linkedinMessage: string;
 }
 
 // ── Dashboard ───────────────────────────────────────────────
@@ -215,8 +223,21 @@ export interface DashboardStats {
 }
 
 // ── Job Title Recommendations ───────────────────────────────
+/**
+ * Tier reflects how attainable a title is *right now* for this candidate.
+ * Used by the prompt to stop over-ranking impressive-sounding titles and
+ * by the UI to group/badge recommendations.
+ */
+export type JobTitleTier = 'realistic' | 'low_hanging_fruit' | 'reach' | 'long_term_fit';
+
+export interface JobTitleRecommendation {
+    title: string;
+    tier: JobTitleTier;
+    reasoning: string;
+}
+
 export interface JobTitleResult {
-    titles: Array<{ title: string; reasoning: string }>;
+    titles: JobTitleRecommendation[];
     generatedAt: string;
 }
 

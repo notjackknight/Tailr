@@ -45,8 +45,12 @@ export function downloadResume(
     contactName = 'Resume',
 ) {
     const filename = format === 'pdf' ? pdfFilename : pdfFilename.replace(/\.pdf$/, '.docx');
-    const downloadName = `${slugify(contactName)}_Resume_${slugify(company)}.${format}`;
-    downloadFile(`/api/resume/${filename}`, downloadName);
+    const downloadName = `${slugify(contactName)}_${slugify(company)}.${format}`;
+    // Pass the friendly name to the server so it sets Content-Disposition:
+    // attachment with that name — the header is authoritative and isn't
+    // overridden by the browser the way the anchor's `download` attr can be.
+    const url = `/api/resume/${filename}?download=${encodeURIComponent(downloadName)}`;
+    downloadFile(url, downloadName);
 }
 
 /** Format a DB timestamp (UTC, no Z) to a relative time string. */

@@ -9,7 +9,7 @@ All prompts run against the user's chosen provider — Gemini, Anthropic, or Ope
 | `prompts/content-selector.md` | `selectContent()`       | `smart` | Main tailored-resume generator                |
 | `prompts/project-scorer.md`   | `scoreProjects()`       | `fast`  | Phase 1: rank every project against the JD    |
 | `prompts/resume-parser.md`    | `convertMasterResume()` | `fast`  | Convert raw text → structured YAML            |
-| `prompts/outreach.md`         | `generateOutreach()`    | `fast`  | Hiring-manager personas + LinkedIn message    |
+| `prompts/cold-dm.md`          | `generateColdDm()`      | `fast`  | Short, human LinkedIn cold DM per tailored resume |
 | `prompts/job-titles.md`       | `generateJobTitles()`   | `fast`  | Top-10 search keywords from the master resume |
 
 Model mapping lives in `server/llm.ts:MODEL_MAP`:

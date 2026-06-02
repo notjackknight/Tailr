@@ -1,154 +1,61 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
 import { GlassCard } from '../components/ui/GlassCard';
 import { Button } from '../components/ui/Button';
-import { SectionHeader } from '../components/ui/SectionHeader';
-import { EmptyState } from '../components/ui/EmptyState';
-import { Skeleton } from '../components/ui/Skeleton';
 import { PdfPreviewModal } from '../components/modals/PdfPreviewModal';
 import { AnalysisModal } from '../components/modals/AnalysisModal';
 import { MasterResumeModal } from '../components/modals/MasterResumeModal';
-import { OutreachGenerator } from '../components/OutreachGenerator';
 import { JobTitleRecommendations } from '../components/JobTitleRecommendations';
-import { VaultCard } from '../components/VaultCard';
+import { SummaryResumeCard } from '../components/SummaryResumeCard';
+import { ScoreRing } from '../components/ui/ScoreRing';
 import {
     FileText,
     Clock,
     Upload as UploadIcon,
-    BarChart3,
-    TrendingUp,
-    Building2,
-    Sparkles,
     CheckCircle2,
     Edit3,
+    Archive,
+    ChevronRight,
+    Sparkles,
+    Eye,
+    Download,
+    BarChart3,
 } from 'lucide-react';
-import {
-    fetchHistory,
-    deleteGeneration as apiDeleteGeneration,
-    fetchMasterResume,
-    fetchDashboardStats,
-} from '../lib/api';
-import { toast } from '../components/ui/Toast';
-import type { HistoryEntry, DashboardStats, AppConfig } from '../../shared/types';
+import { fetchHistory, fetchMasterResume } from '../lib/api';
+import { downloadResume, formatRelativeDate } from '../lib/utils';
+import type { HistoryEntry, AppConfig } from '../../shared/types';
 
-import {
-    Chart as ChartJS,
-    CategoryScale,
-    LinearScale,
-    PointElement,
-    LineElement,
-    ArcElement,
-    Tooltip,
-    Legend,
-    Filler,
-} from 'chart.js';
-import { Line, Doughnut } from 'react-chartjs-2';
-
-ChartJS.register(
-    CategoryScale,
-    LinearScale,
-    PointElement,
-    LineElement,
-    ArcElement,
-    Tooltip,
-    Legend,
-    Filler,
-);
-
-const StatCard = ({
-    label,
-    value,
-    icon,
-    accent,
-    primary = false,
-}: {
-    label: string;
-    value: string | number;
-    icon: React.ReactNode;
-    accent?: string;
-    primary?: boolean;
-}) => (
-    <GlassCard
-        variant={primary ? 'featured' : 'default'}
-        padding={primary ? 'lg' : 'md'}
-        radius={primary ? 'xl' : 'lg'}
-        className={`flex items-center gap-4 ${primary ? 'sm:col-span-2 lg:col-span-2' : ''}`}
-    >
-        <div
-            className="rounded-xl flex items-center justify-center border shrink-0"
-            style={{
-                width: primary ? 56 : 44,
-                height: primary ? 56 : 44,
-                background: `${accent || '#054F31'}14`,
-                borderColor: `${accent || '#054F31'}28`,
-            }}
-        >
-            {icon}
-        </div>
-        <div className="min-w-0">
-            <span className="text-[11px] text-gray-500 uppercase tracking-wider block">{label}</span>
-            <span
-                className={`font-bold text-white block truncate ${primary ? 'text-3xl md:text-4xl' : 'text-xl md:text-2xl'}`}
-                title={String(value)}
-            >
-                {value}
-            </span>
-        </div>
-    </GlassCard>
-);
+type View = 'dashboard' | 'studio' | 'settings' | 'vault';
 
 interface DashboardProps {
     config: AppConfig | null;
     hasApiKey: boolean;
     onConfigChange: () => void;
+    onNavigate: (view: View) => void;
 }
 
-export const Dashboard = ({ config, hasApiKey, onConfigChange }: DashboardProps) => {
+export const Dashboard = ({ config, hasApiKey, onConfigChange, onNavigate }: DashboardProps) => {
     const [history, setHistory] = useState<HistoryEntry[]>([]);
-    const [loading, setLoading] = useState(true);
     const [previewEntry, setPreviewEntry] = useState<HistoryEntry | null>(null);
     const [analysisEntry, setAnalysisEntry] = useState<HistoryEntry | null>(null);
-    const [stats, setStats] = useState<DashboardStats | null>(null);
 
     const [isMasterOpen, setIsMasterOpen] = useState(false);
     const [masterContent, setMasterContent] = useState('');
     const [isMasterLoading, setIsMasterLoading] = useState(false);
     const [masterResumeVersion, setMasterResumeVersion] = useState(0);
-
     const contactName = config?.profile?.name || 'Resume';
     const masterResumePresent = config?.masterResumePresent ?? false;
+    const resumeCount = history.length;
 
-    const loadData = useCallback(async () => {
-        setLoading(true);
+    const loadHistory = useCallback(async () => {
         try {
-            const [historyData, statsData] = await Promise.all([
-                fetchHistory(),
-                fetchDashboardStats(),
-            ]);
-            setHistory(historyData);
-            setStats(statsData);
+            setHistory(await fetchHistory());
         } catch {
-            // non-fatal — empty state will render
-        } finally {
-            setLoading(false);
+            // non-fatal — empty state renders
         }
     }, []);
 
-    useEffect(() => { loadData(); }, [loadData]);
-
-    const handleDelete = async (entry: HistoryEntry) => {
-        try {
-            await apiDeleteGeneration(entry.id);
-            setHistory((prev) => prev.filter((h) => h.id !== entry.id));
-            toast.success(`Deleted resume for ${entry.company}`);
-            try {
-                const statsData = await fetchDashboardStats();
-                setStats(statsData);
-            } catch { /* non-critical */ }
-        } catch {
-            toast.error('Failed to delete generation. Please try again.');
-        }
-    };
+    useEffect(() => { loadHistory(); }, [loadHistory]);
 
     const handleOpenMaster = async () => {
         setIsMasterOpen(true);
@@ -169,81 +76,17 @@ export const Dashboard = ({ config, hasApiKey, onConfigChange }: DashboardProps)
         onConfigChange();
     };
 
-    const scoreTrendData = stats
-        ? {
-            labels: stats.scoreTrend.map((d) =>
-                new Date(d.date + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-            ),
-            datasets: [{
-                label: 'Fit Score',
-                data: stats.scoreTrend.map((d) => d.score),
-                borderColor: '#1A9E7A',
-                backgroundColor: 'rgba(26, 158, 122, 0.12)',
-                fill: true,
-                tension: 0.4,
-                pointRadius: 4,
-                pointBackgroundColor: '#1A9E7A',
-                pointBorderColor: '#FFFFFF',
-                pointBorderWidth: 2,
-            }],
-        }
-        : null;
-
-    const roleDistData = stats
-        ? {
-            labels: stats.roleDistribution.map((d) => d.role),
-            datasets: [{
-                data: stats.roleDistribution.map((d) => d.count),
-                backgroundColor: ['#054F31', '#1A9E7A', '#34D8B4', '#A7F3E0', '#0E4D40', '#526e7d', '#7A8B92', '#BCC9C5'],
-                borderColor: '#FFFFFF',
-                borderWidth: 2,
-            }],
-        }
-        : null;
-
-    const chartOptions = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { display: false },
-            tooltip: {
-                backgroundColor: '#0F1F1A', titleColor: '#FFFFFF', bodyColor: '#E6ECEA',
-                borderColor: 'rgba(5, 79, 49, 0.20)', borderWidth: 1,
-                cornerRadius: 12, padding: 12,
-            },
-        },
-        scales: {
-            x: { grid: { color: 'rgba(82, 110, 125, 0.10)' }, ticks: { color: '#526e7d', font: { size: 11 } } },
-            y: { grid: { color: 'rgba(82, 110, 125, 0.10)' }, ticks: { color: '#526e7d', font: { size: 11 } }, min: 0, max: 10 },
-        },
-    };
-
-    const doughnutOptions = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                position: 'bottom' as const,
-                labels: { color: '#526e7d', font: { size: 12 }, padding: 16, usePointStyle: true },
-            },
-            tooltip: {
-                backgroundColor: '#0F1F1A', titleColor: '#FFFFFF', bodyColor: '#E6ECEA',
-                borderColor: 'rgba(5, 79, 49, 0.20)', borderWidth: 1,
-                cornerRadius: 12, padding: 12,
-            },
-        },
-        cutout: '65%',
-    };
-
-    const hasGenerations = stats && stats.totalGenerations > 0;
-    const showInsights = stats && (stats.scoreTrend.length > 1 || stats.roleDistribution.length > 0);
+    const handleSummaryGenerated = useCallback(async () => {
+        // A summary resume was generated — keep the recent list + count in sync.
+        loadHistory();
+    }, [loadHistory]);
 
     return (
         <div className="space-y-6 md:space-y-8 flex-1">
             <header className="flex items-end justify-between flex-wrap gap-3">
                 <div>
                     <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white mb-1.5">
-                        Library
+                        Dashboard
                     </h1>
                     <p className="text-sm md:text-base text-gray-400">
                         {masterResumePresent
@@ -292,141 +135,32 @@ export const Dashboard = ({ config, hasApiKey, onConfigChange }: DashboardProps)
                 </div>
             </GlassCard>
 
-            {/* ── Stats Cards (only when there are generations) ──────── */}
-            {hasGenerations && (
-                <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4"
-                >
-                    <StatCard
-                        label="Total resumes"
-                        value={stats!.totalGenerations}
-                        icon={<FileText size={22} style={{ color: '#054F31' }} />}
-                        accent="#054F31"
-                        primary
-                    />
-                    <StatCard
-                        label="Avg fit score"
-                        value={stats!.averageScore}
-                        icon={<TrendingUp size={20} style={{ color: '#1A9E7A' }} />}
-                        accent="#1A9E7A"
-                    />
-                    <StatCard
-                        label="Top company"
-                        value={stats!.topCompany}
-                        icon={<Building2 size={20} style={{ color: '#0E4D40' }} />}
-                        accent="#0E4D40"
-                    />
-                    <StatCard
-                        label="Status"
-                        value={masterResumePresent ? 'Ready' : 'Setup'}
-                        icon={<Sparkles size={20} style={{ color: '#34D8B4' }} />}
-                        accent="#34D8B4"
-                    />
-                </motion.div>
-            )}
-
-            {/* ── Charts row ─────────────────────────────────────────── */}
-            {showInsights && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-                    {scoreTrendData && stats!.scoreTrend.length > 1 && (
-                        <GlassCard padding="md" radius="lg">
-                            <SectionHeader
-                                icon={<BarChart3 size={16} />}
-                                title="Score trend"
-                                subtitle="Your fit score over time"
-                                accent="tailr"
-                                as="h3"
-                                className="mb-4"
-                            />
-                            <div className="h-52">
-                                <Line data={scoreTrendData} options={chartOptions} />
-                            </div>
-                        </GlassCard>
-                    )}
-                    {roleDistData && stats!.roleDistribution.length > 0 && (
-                        <GlassCard padding="md" radius="lg">
-                            <SectionHeader
-                                icon={<BarChart3 size={16} />}
-                                title="Role distribution"
-                                subtitle="Where you've been tailoring"
-                                accent="green"
-                                as="h3"
-                                className="mb-4"
-                            />
-                            <div className="h-52">
-                                <Doughnut data={roleDistData} options={doughnutOptions} />
-                            </div>
-                        </GlassCard>
-                    )}
-                </div>
-            )}
-
-            {/* ── Outreach + JobTitles need both a master resume and an API key ── */}
-            {masterResumePresent && hasApiKey && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
+            {/* ── JobTitles + (Summary stacked over Vault) ──────────── */}
+            {masterResumePresent && hasApiKey ? (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 items-start">
                     <JobTitleRecommendations masterResumeVersion={masterResumeVersion} />
-                    <OutreachGenerator />
-                </div>
-            )}
-
-            {/* ── Vault ──────────────────────────────────────────────── */}
-            <div className="pt-2">
-                <SectionHeader
-                    icon={<FileText size={18} />}
-                    title="Tailored resumes"
-                    subtitle={
-                        history.length > 0
-                            ? `${history.length} ${history.length === 1 ? 'resume' : 'resumes'} in your vault`
-                            : 'No resumes yet'
-                    }
-                    as="h2"
-                    className="mb-4"
-                />
-
-                {!loading && history.length === 0 && (
-                    <GlassCard padding="lg" radius="lg">
-                        <EmptyState
-                            icon={<FileText size={28} />}
-                            title="No tailored resumes yet"
-                            description={
-                                masterResumePresent
-                                    ? 'Head to Tailor to generate your first resume.'
-                                    : 'Upload your master resume above to get started.'
-                            }
+                    <div className="flex flex-col gap-3 md:gap-4">
+                        <SummaryResumeCard
+                            masterResumePresent={masterResumePresent}
+                            hasApiKey={hasApiKey}
+                            contactName={contactName}
+                            onPreview={setPreviewEntry}
+                            masterResumeVersion={masterResumeVersion}
+                            onGenerated={handleSummaryGenerated}
                         />
-                    </GlassCard>
-                )}
-
-                {loading && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-                        {[1, 2, 3].map((i) => (
-                            <GlassCard key={i} padding="md" radius="lg">
-                                <Skeleton className="h-9 w-9 mb-3" rounded="full" />
-                                <Skeleton className="h-4 w-3/4 mb-2" />
-                                <Skeleton className="h-3 w-1/2 mb-4" />
-                                <Skeleton className="h-3 w-full" />
-                            </GlassCard>
-                        ))}
+                        <QuickTailorCard onTailor={() => onNavigate('studio')} />
+                        <RecentResumesCard
+                            entries={history}
+                            contactName={contactName}
+                            onPreview={setPreviewEntry}
+                            onAnalysis={setAnalysisEntry}
+                            onViewAll={() => onNavigate('vault')}
+                        />
                     </div>
-                )}
-
-                {!loading && history.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-                        {history.map((entry) => (
-                            <VaultCard
-                                key={entry.id}
-                                entry={entry}
-                                contactName={contactName}
-                                onAnalysis={setAnalysisEntry}
-                                onPreview={setPreviewEntry}
-                                onDelete={handleDelete}
-                            />
-                        ))}
-                    </div>
-                )}
-            </div>
+                </div>
+            ) : (
+                <VaultSummaryCard resumeCount={resumeCount} onOpen={() => onNavigate('vault')} />
+            )}
 
             <AnimatePresence>
                 {previewEntry && (
@@ -447,9 +181,143 @@ export const Dashboard = ({ config, hasApiKey, onConfigChange }: DashboardProps)
 
             <AnimatePresence>
                 {isMasterOpen && !isMasterLoading && (
-                    <MasterResumeModal initialContent={masterContent} onClose={handleMasterClose} />
+                    <MasterResumeModal
+                        initialContent={masterContent}
+                        defaultTab={masterResumePresent ? 'edit' : 'upload'}
+                        onClose={handleMasterClose}
+                    />
                 )}
             </AnimatePresence>
         </div>
+    );
+};
+
+/** Compact card linking to the full Vault page. */
+const VaultSummaryCard = ({ resumeCount, onOpen }: { resumeCount: number; onOpen: () => void }) => (
+    <button
+        type="button"
+        onClick={onOpen}
+        className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4F00] rounded-2xl"
+    >
+        <GlassCard variant="featured" radius="xl" padding="lg" hoverEffect>
+            <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                    <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10 shrink-0">
+                        <Archive className="text-white/80" size={24} />
+                    </div>
+                    <div className="min-w-0">
+                        <h2 className="text-base md:text-lg font-semibold text-white">Vault</h2>
+                        <p className="text-xs md:text-sm text-gray-400 mt-0.5">
+                            {resumeCount > 0
+                                ? `${resumeCount} tailored ${resumeCount === 1 ? 'resume' : 'resumes'}`
+                                : 'No resumes yet'}
+                        </p>
+                    </div>
+                </div>
+                <span className="inline-flex items-center gap-1 text-sm font-semibold text-[#FF4F00] shrink-0">
+                    View vault
+                    <ChevronRight size={16} />
+                </span>
+            </div>
+        </GlassCard>
+    </button>
+);
+
+/** Prominent CTA into the Tailor flow. */
+const QuickTailorCard = ({ onTailor }: { onTailor: () => void }) => (
+    <GlassCard radius="lg" padding="md">
+        <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+                <div className="w-11 h-11 rounded-xl bg-[#FF4F00]/10 border border-[#FF4F00]/25 flex items-center justify-center shrink-0">
+                    <Sparkles size={20} className="text-[#FF4F00]" />
+                </div>
+                <div className="min-w-0">
+                    <h3 className="text-base font-semibold text-white">Tailor a resume</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">Paste a job description, get a one-page fit.</p>
+                </div>
+            </div>
+            <Button variant="primary" size="md" onClick={onTailor} className="shrink-0">
+                Start
+            </Button>
+        </div>
+    </GlassCard>
+);
+
+/** The 3 most recent tailored resumes, with a link to the full Vault. */
+const RecentResumesCard = ({
+    entries,
+    contactName,
+    onPreview,
+    onAnalysis,
+    onViewAll,
+}: {
+    entries: HistoryEntry[];
+    contactName: string;
+    onPreview: (entry: HistoryEntry) => void;
+    onAnalysis: (entry: HistoryEntry) => void;
+    onViewAll: () => void;
+}) => {
+    if (entries.length === 0) return null;
+    const recent = entries.slice(0, 3);
+    return (
+        <GlassCard radius="lg" padding="md" className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Clock size={15} className="text-gray-400" /> Recent resumes
+                </h3>
+                <button
+                    type="button"
+                    onClick={onViewAll}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#FF4F00] hover:text-[#FF6B1F] transition-colors"
+                >
+                    View all <ChevronRight size={13} />
+                </button>
+            </div>
+            <div className="space-y-2">
+                {recent.map((entry) => (
+                    <div
+                        key={entry.id}
+                        className="flex items-center gap-3 px-2.5 py-2 rounded-xl bg-white/[0.03] border border-white/5"
+                    >
+                        <ScoreRing score={entry.score} size={36} strokeWidth={3} animate={false} />
+                        <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-white truncate" title={entry.role}>
+                                {entry.role}
+                            </p>
+                            <p className="text-[11px] text-gray-500 truncate">
+                                {entry.company} · {formatRelativeDate(entry.created_at)}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => onAnalysis(entry)}
+                            title="View analysis"
+                            aria-label={`View analysis for ${entry.role}`}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                        >
+                            <BarChart3 size={15} />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onPreview(entry)}
+                            title="Preview"
+                            aria-label={`Preview ${entry.role}`}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                        >
+                            <Eye size={15} />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => downloadResume(entry.pdf_filename, entry.company, 'pdf', contactName)}
+                            title="Download PDF"
+                            aria-label={`Download ${entry.role} PDF`}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                        >
+                            <Download size={15} />
+                        </button>
+                    </div>
+                ))}
+            </div>
+        </GlassCard>
     );
 };

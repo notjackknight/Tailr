@@ -13,10 +13,10 @@ import { loadPreferences } from './userConfig.js';
 import { generateJson, generateText } from './llm.js';
 import type {
     ContentSelectionResult,
-    OutreachResult,
     JobTitleResult,
     UserPreferences,
     LlmCredentials,
+    ResumeData,
 } from '../shared/types.js';
 
 export type { ContentSelectionResult };
@@ -259,6 +259,70 @@ ${jobDescription}`;
     return result;
 }
 
+// ── Phase 2 (alt): LinkedIn-default resume generation ───────
+//
+// Same output schema as selectContent() so the renderer + DB layer
+// can be reused unchanged. The differences are:
+//   • no job description — the prompt picks a realistic role cluster
+//     from the candidate's background.
+//   • project pre-scoring is skipped (we don't have a JD to score against);
+//     the prompt is told to pick the 2–3 most broadly relevant projects
+//     from the master resume directly.
+
+export async function selectContentLinkedInDefault(
+    creds: LlmCredentials,
+): Promise<ContentSelectionResult> {
+    const masterResume = fs.readFileSync(MASTER_RESUME_PATH, 'utf8');
+    const preferences = loadPreferences();
+
+    const systemPrompt = `${loadPrompt('linkedin-default.md')}
+
+---
+
+## Candidate Master Resume (YAML)
+
+Pick the 2–3 most broadly relevant projects from the \`projects:\` section yourself — there is no job description to score against.
+
+\`\`\`yaml
+${masterResume}
+\`\`\`
+
+---
+
+## Candidate Preferences
+
+\`\`\`yaml
+${preferencesToPromptBlock(preferences)}
+\`\`\`
+
+---
+
+## Output Rules
+- Output ONLY valid JSON — no markdown fences, no commentary, no preamble.
+- The JSON must match the schema in the system prompt above exactly.
+- Set \`fit_assessment.company\` to the literal string "LinkedIn Default".
+- Set \`fit_assessment.role\` to the primary title of the cluster you chose.
+- Aim to fill the page densely — slight overflow is auto-trimmed by a deterministic post-pass.`;
+
+    const userPrompt = `Generate a broad, recruiter-facing default resume for this candidate. There is no specific job description — infer a realistic role cluster from the resume and tailor to that cluster.`;
+
+    const text = await generateJson(creds, {
+        systemPrompt,
+        userPrompt,
+        task: 'smart',
+        temperature: 0.3,
+    });
+
+    const result: ContentSelectionResult = JSON.parse(text);
+    if (!result.fit_assessment || !result.resume_data) {
+        throw new Error('Invalid response structure from LLM — missing fit_assessment or resume_data');
+    }
+    // Force the company sentinel even if the model drifts — the vault uses
+    // it to distinguish LinkedIn-default entries from JD-tailored ones.
+    result.fit_assessment.company = 'LinkedIn Default';
+    return result;
+}
+
 // ── Resume parser ───────────────────────────────────────────
 
 export async function convertMasterResume(
@@ -274,41 +338,61 @@ export async function convertMasterResume(
     return yamlStr.trim();
 }
 
-// ── Outreach ────────────────────────────────────────────────
+// ── Cold DM ─────────────────────────────────────────────────
+//
+// A short, human LinkedIn cold message generated per tailored resume. The
+// model picks one real, relevant skill/project from the ALREADY-tailored
+// resume data so the hook lines up with the resume the recruiter just got.
 
-export async function generateOutreach(
+/** Compact, token-light view of the tailored resume for the DM prompt. */
+function summarizeResumeForDm(resume: ResumeData): string {
+    const skills = (resume.skills || [])
+        .map((s) => `${s.category}: ${s.items}`)
+        .join('\n');
+    const projects = (resume.projects || [])
+        .map((p) => `- ${p.name}${p.tech ? ` (${p.tech})` : ''}`)
+        .join('\n');
+    const experience = (resume.experience || [])
+        .map((e) => `- ${e.title} @ ${e.company}`)
+        .join('\n');
+
+    return [
+        resume.profile ? `Summary: ${resume.profile}` : '',
+        skills ? `Skills:\n${skills}` : '',
+        projects ? `Projects:\n${projects}` : '',
+        experience ? `Experience:\n${experience}` : '',
+    ]
+        .filter(Boolean)
+        .join('\n\n');
+}
+
+export async function generateColdDm(
     creds: LlmCredentials,
     company: string,
     role: string,
-): Promise<OutreachResult> {
-    const masterResume = fs.existsSync(MASTER_RESUME_PATH)
-        ? fs.readFileSync(MASTER_RESUME_PATH, 'utf8')
-        : '';
+    resume: ResumeData,
+): Promise<string> {
+    const userPrompt = `Target Role: ${role}
+Target Company: ${company}
 
-    if (!masterResume.trim()) {
-        throw new Error('No master resume found. Upload one to personalize outreach.');
-    }
-
-    const systemPrompt = `${loadPrompt('outreach.md')}
-
----
-
-## Candidate Master Resume
-
-\`\`\`yaml
-${masterResume}
-\`\`\``;
-
-    const userPrompt = `Target Company: ${company}
-Target Role: ${role}`;
+## Candidate's tailored resume (pick one real, relevant hook from here)
+${summarizeResumeForDm(resume)}`;
 
     const text = await generateJson(creds, {
-        systemPrompt,
+        systemPrompt: loadPrompt('cold-dm.md'),
         userPrompt,
         task: 'fast',
-        temperature: 0.5,
+        temperature: 0.7,
     });
-    return JSON.parse(text) as OutreachResult;
+
+    try {
+        const parsed = JSON.parse(text);
+        const dm = typeof parsed?.dm === 'string' ? parsed.dm.trim() : '';
+        // Defensive: strip any stray em dashes the model slips in.
+        return dm.replace(/\s*—\s*/g, ', ');
+    } catch {
+        return '';
+    }
 }
 
 // ── Job titles ──────────────────────────────────────────────
@@ -331,8 +415,18 @@ ${masterResume}
         temperature: 0.4,
     });
     const parsed = JSON.parse(text);
+    const validTiers = new Set(['realistic', 'low_hanging_fruit', 'reach', 'long_term_fit']);
+    const titles = (Array.isArray(parsed.titles) ? parsed.titles : [])
+        .filter((t: any) => t && typeof t.title === 'string' && t.title.trim())
+        .map((t: any) => ({
+            title: t.title.trim(),
+            // Default unknown/missing tiers to "realistic" so old cached payloads
+            // and lenient model outputs still render sensibly.
+            tier: validTiers.has(t.tier) ? t.tier : 'realistic',
+            reasoning: typeof t.reasoning === 'string' ? t.reasoning : '',
+        }));
     return {
-        titles: parsed.titles || [],
+        titles,
         generatedAt: new Date().toISOString(),
     };
 }

@@ -6,12 +6,13 @@ import {
   Settings,
   AlertTriangle,
   CheckCircle2,
+  Archive,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { getActiveProvider, hasActiveKey, PROVIDER_LABELS, subscribeApiKey } from '../../lib/apiKey';
 import type { AppConfig, LlmProvider } from '../../../shared/types';
 
-type View = 'dashboard' | 'studio' | 'settings';
+type View = 'dashboard' | 'studio' | 'settings' | 'vault';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -28,14 +29,16 @@ interface AppShellProps {
 }
 
 const navItems: Array<{ id: View; label: string; icon: React.ReactNode }> = [
-  { id: 'dashboard', label: 'Library', icon: <LayoutDashboard size={20} /> },
+  { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
   { id: 'studio', label: 'Tailor', icon: <Sparkles size={20} /> },
+  { id: 'vault', label: 'Vault', icon: <Archive size={20} /> },
   { id: 'settings', label: 'Settings', icon: <Settings size={20} /> },
 ];
 
 const VIEW_TITLES: Record<View, string> = {
-  dashboard: 'Library',
+  dashboard: 'Dashboard',
   studio: 'Tailor',
+  vault: 'Vault',
   settings: 'Settings',
 };
 
@@ -190,7 +193,7 @@ export const AppShell = ({
         {/* Desktop floating slot (e.g. SetupBanner). Hidden on mobile. */}
         <div className="hidden md:block">{topRightSlot}</div>
 
-        <div className={cn('flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-6 lg:p-8 pb-24 md:pb-8')}>
+        <div className={cn('flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-6 lg:p-8')}>
           <AnimatePresence mode="wait">
             <motion.div
               key={currentView}
@@ -199,7 +202,9 @@ export const AppShell = ({
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
               className={cn(
-                'min-h-full lg:h-full flex flex-col',
+                // pb-24 keeps content clear of the mobile bottom nav; on md+ there
+                // is no bottom nav, so trim the trailing space to a small gutter.
+                'min-h-full flex flex-col pb-24 md:pb-6 lg:pb-8',
                 constrainContent ? 'max-w-7xl mx-auto w-full' : 'w-full',
               )}
             >

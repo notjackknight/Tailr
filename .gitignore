@@ -12,6 +12,7 @@ data/master_resume.yaml
 data/profile.json
 data/preferences.json
 data/job_titles.json
+data/summary_resume.json
 
 # Generated outputs
 output/*

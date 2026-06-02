@@ -8,7 +8,6 @@ import type {
     HistoryEntry,
     GenerationResult,
     DashboardStats,
-    OutreachResult,
     JobTitleResult,
     AppConfig,
     UserProfile,
@@ -161,19 +160,7 @@ export interface SSECallbacks {
     onError: (message: string) => void;
 }
 
-export async function generateResume(
-    jobDescription: string,
-    companyName: string | undefined,
-    callbacks: SSECallbacks,
-    signal?: AbortSignal,
-): Promise<void> {
-    const response = await fetch('/api/generate', withApiKey({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobDescription, companyName }),
-        signal,
-    }));
-
+async function consumeGenerationStream(response: Response, callbacks: SSECallbacks): Promise<void> {
     if (!response.ok) {
         throw new Error(await readError(response, `Server error: ${response.status}`));
     }
@@ -208,23 +195,43 @@ export async function generateResume(
     }
 }
 
+export async function generateResume(
+    jobDescription: string,
+    companyName: string | undefined,
+    callbacks: SSECallbacks,
+    signal?: AbortSignal,
+): Promise<void> {
+    const response = await fetch('/api/generate', withApiKey({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobDescription, companyName }),
+        signal,
+    }));
+    await consumeGenerationStream(response, callbacks);
+}
+
+/**
+ * Generate a broad, recruiter-facing summary resume — no job description.
+ * The server picks a realistic role cluster from the master resume and
+ * compiles a one-page resume that works well as a LinkedIn default. No
+ * external services are called.
+ */
+export async function generateSummaryResume(
+    callbacks: SSECallbacks,
+    signal?: AbortSignal,
+): Promise<void> {
+    const response = await fetch('/api/generate/summary', withApiKey({
+        method: 'POST',
+        signal,
+    }));
+    await consumeGenerationStream(response, callbacks);
+}
+
 // ── Dashboard ───────────────────────────────────────────────
 
 export async function fetchDashboardStats(): Promise<DashboardStats> {
     const res = await fetch('/api/dashboard/stats');
     if (!res.ok) throw new Error('Failed to load dashboard stats');
-    return res.json();
-}
-
-// ── Outreach ────────────────────────────────────────────────
-
-export async function generateOutreach(company: string, role: string): Promise<OutreachResult> {
-    const res = await fetch('/api/outreach', withApiKey({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company, role }),
-    }));
-    if (!res.ok) throw new Error(await readError(res, 'Failed to generate outreach'));
     return res.json();
 }
 
@@ -240,4 +247,13 @@ export async function regenerateJobTitles(): Promise<JobTitleResult> {
     const res = await fetch('/api/job-titles/generate', withApiKey({ method: 'POST' }));
     if (!res.ok) throw new Error(await readError(res, 'Failed to generate job titles'));
     return res.json();
+}
+
+// ── Summary Resume pointer ──────────────────────────────────
+
+export async function fetchSummaryResume(): Promise<HistoryEntry | null> {
+    const res = await fetch('/api/summary-resume');
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.entry || null;
 }

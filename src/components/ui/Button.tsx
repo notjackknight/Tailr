@@ -1,5 +1,4 @@
 import React from 'react';
-import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'link';
@@ -54,25 +53,32 @@ export const Button = ({
 
   // The link variant ignores padding/radius from sizes.
   const isLink = variant === 'link';
-  // Ghost / link should not pop on hover — the scale animation feels wrong.
-  const interactive = variant !== 'ghost' && variant !== 'link';
+  // Solid CTAs get the neon-scan hover; ghost/link keep their subtle states.
+  const scan = variant === 'primary' || variant === 'secondary' || variant === 'danger';
+
+  // Per-variant neon beam + inverted-text colors (consumed by .btn-scan in CSS).
+  const scanVars: React.CSSProperties | undefined = scan
+    ? variant === 'danger'
+      ? ({ ['--scan-neon' as any]: '#FF5C5C', ['--scan-ink' as any]: '#1A0606' })
+      : ({ ['--scan-neon' as any]: '#34D8B4', ['--scan-ink' as any]: '#04130D' })
+    : undefined;
 
   return (
-    <motion.button
-      whileHover={interactive && !disabled && !isLoading ? { scale: 1.02 } : undefined}
-      whileTap={interactive && !disabled && !isLoading ? { scale: 0.96 } : undefined}
+    <button
       className={cn(
         baseStyles,
         variants[variant],
         !isLink && sizes[size],
+        scan && 'btn-scan',
         fullWidth && 'w-full',
         className,
       )}
+      style={scanVars}
       disabled={isLoading || disabled}
       {...(props as any)}
     >
       {variant === 'primary' && (
-        <div className="absolute inset-0 bg-gradient-tailr opacity-100 group-hover:opacity-90 transition-opacity" />
+        <div className="absolute inset-0 bg-gradient-tailr transition-opacity duration-300" />
       )}
 
       <span className="relative z-10 flex items-center gap-2">
@@ -104,6 +110,6 @@ export const Button = ({
         {children}
         {!isLoading && iconPosition === 'right' ? icon : null}
       </span>
-    </motion.button>
+    </button>
   );
 };

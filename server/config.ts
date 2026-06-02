@@ -18,6 +18,7 @@ export const MASTER_RESUME_PATH = path.join(DATA_DIR, 'master_resume.yaml');
 export const PROFILE_PATH = path.join(DATA_DIR, 'profile.json');
 export const PREFERENCES_PATH = path.join(DATA_DIR, 'preferences.json');
 export const JOB_TITLES_PATH = path.join(DATA_DIR, 'job_titles.json');
+export const SUMMARY_RESUME_PATH = path.join(DATA_DIR, 'summary_resume.json');
 
 export const TEMPLATE_PATH = path.join(PROJECT_ROOT, 'templates', 'resume.html');
 export const OUTPUT_DIR = path.join(PROJECT_ROOT, 'output');

@@ -19,7 +19,7 @@ import { PDFParse } from 'pdf-parse';
 import { runPipeline } from './pipeline.js';
 import { getHistory, getGeneration, deleteGeneration, getDashboardStats } from './db.js';
 import { getOutputDir } from './renderer.js';
-import { convertMasterResume, generateOutreach, generateJobTitles } from './llmCalls.js';
+import { convertMasterResume, generateJobTitles } from './llmCalls.js';
 import { isValidProvider } from './llm.js';
 import { closeBrowser } from './browser.js';
 import {
@@ -28,6 +28,7 @@ import {
     ENV_PATH,
     PORT,
     JOB_TITLES_PATH,
+    SUMMARY_RESUME_PATH,
     DATA_DIR,
 } from './config.js';
 import {
@@ -280,7 +281,11 @@ app.post('/api/generate', async (req, res) => {
     });
 
     try {
-        const pipeline = runPipeline(creds, jobDescription.trim(), companyName?.trim());
+        const pipeline = runPipeline(creds, {
+            kind: 'tailored',
+            jobDescription: jobDescription.trim(),
+            companyOverride: companyName?.trim(),
+        });
         for await (const event of pipeline) {
             if ('type' in event) {
                 res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
@@ -295,6 +300,95 @@ app.post('/api/generate', async (req, res) => {
         })}\n\n`);
     }
     res.end();
+});
+
+// ── Generate (Summary resume — SSE) ─────────────────────────
+//
+// A broad, recruiter-facing one-pager built from the master resume with no
+// job description. Works well as a LinkedIn default resume, but the server
+// does not call any LinkedIn API.
+
+app.post('/api/generate/summary', async (req, res) => {
+    const creds = getCredentials(req);
+    if (!creds) {
+        res.status(400).json(MISSING_CREDS_RESPONSE);
+        return;
+    }
+    if (!fs.existsSync(MASTER_RESUME_PATH)) {
+        res.status(400).json({
+            error: 'No master resume found. Upload one from the Dashboard before generating.',
+        });
+        return;
+    }
+
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+    });
+
+    try {
+        const pipeline = runPipeline(creds, { kind: 'linkedin-default' });
+        for await (const event of pipeline) {
+            if ('type' in event) {
+                // On successful completion, persist a pointer to this generation
+                // so the dashboard card can restore it across reloads without
+                // having to scan history for it.
+                if (event.type === 'complete' && event.result?.id) {
+                    try {
+                        ensureDataDir();
+                        fs.writeFileSync(
+                            SUMMARY_RESUME_PATH,
+                            JSON.stringify({ generationId: event.result.id }, null, 2),
+                            'utf8',
+                        );
+                    } catch {
+                        // Non-fatal — the entry still exists in the vault.
+                    }
+                }
+                res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+            } else {
+                res.write(`event: progress\ndata: ${JSON.stringify(event)}\n\n`);
+            }
+        }
+    } catch (err: any) {
+        res.write(`event: error\ndata: ${JSON.stringify({
+            type: 'error',
+            message: err?.message || 'Generation failed',
+        })}\n\n`);
+    }
+    res.end();
+});
+
+// ── Summary resume pointer ──────────────────────────────────
+//
+// Returns the latest summary resume's history record, or null if there isn't one
+// or if the pointer is stale (the underlying generation was deleted from the vault).
+
+app.get('/api/summary-resume', (_req, res) => {
+    try {
+        if (!fs.existsSync(SUMMARY_RESUME_PATH)) {
+            res.json({ entry: null });
+            return;
+        }
+        const raw = JSON.parse(fs.readFileSync(SUMMARY_RESUME_PATH, 'utf8'));
+        const id = typeof raw?.generationId === 'number' ? raw.generationId : null;
+        if (id == null) {
+            res.json({ entry: null });
+            return;
+        }
+        const record = getGeneration(id);
+        if (!record) {
+            // The user deleted the generation from the vault — clear the pointer.
+            try { fs.unlinkSync(SUMMARY_RESUME_PATH); } catch { /* noop */ }
+            res.json({ entry: null });
+            return;
+        }
+        res.json({ entry: record });
+    } catch (err: any) {
+        res.status(500).json({ error: 'Failed to load summary resume' });
+    }
 });
 
 // ── History ─────────────────────────────────────────────────
@@ -350,7 +444,18 @@ app.get('/api/resume/:filename', (req, res) => {
     const ext = path.extname(filename).toLowerCase();
     if (ext === '.pdf') res.setHeader('Content-Type', 'application/pdf');
     else if (ext === '.docx') res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+
+    // When a ?download=<name> param is present, force a download with that
+    // friendly name; otherwise serve inline (preview/iframe). The name is
+    // sanitized to a safe basename so it can't break the header.
+    const downloadParam = typeof req.query.download === 'string' ? req.query.download : '';
+    if (downloadParam) {
+        const safeName = downloadParam.replace(/[^A-Za-z0-9_\-.]/g, '_').slice(0, 120) || `resume${ext}`;
+        const withExt = safeName.toLowerCase().endsWith(ext) ? safeName : `${safeName}${ext}`;
+        res.setHeader('Content-Disposition', `attachment; filename="${withExt}"`);
+    } else {
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    }
     res.sendFile(resolvedPath);
 });
 
@@ -364,26 +469,6 @@ app.get('/api/dashboard/stats', (_req, res) => {
     }
 });
 
-// ── Outreach ────────────────────────────────────────────────
-
-app.post('/api/outreach', async (req, res) => {
-    const { company, role } = req.body || {};
-    if (!company || !role || typeof company !== 'string' || typeof role !== 'string') {
-        res.status(400).json({ error: 'Company and role are required' });
-        return;
-    }
-    const creds = getCredentials(req);
-    if (!creds) {
-        res.status(400).json(MISSING_CREDS_RESPONSE);
-        return;
-    }
-    try {
-        res.json(await generateOutreach(creds, company.trim(), role.trim()));
-    } catch (err: any) {
-        res.status(500).json({ error: err?.message || 'Failed to generate outreach' });
-    }
-});
-
 // ── Job titles ──────────────────────────────────────────────
 
 app.get('/api/job-titles', (_req, res) => {
@@ -392,7 +477,15 @@ app.get('/api/job-titles', (_req, res) => {
             res.json({ titles: [], generatedAt: '' });
             return;
         }
-        res.json(JSON.parse(fs.readFileSync(JOB_TITLES_PATH, 'utf8')));
+        const raw = JSON.parse(fs.readFileSync(JOB_TITLES_PATH, 'utf8'));
+        // Backfill `tier` for files saved before tiered recommendations existed.
+        const validTiers = new Set(['realistic', 'low_hanging_fruit', 'reach', 'long_term_fit']);
+        const titles = (Array.isArray(raw?.titles) ? raw.titles : []).map((t: any) => ({
+            title: typeof t?.title === 'string' ? t.title : '',
+            tier: validTiers.has(t?.tier) ? t.tier : 'realistic',
+            reasoning: typeof t?.reasoning === 'string' ? t.reasoning : '',
+        })).filter((t: any) => t.title);
+        res.json({ titles, generatedAt: raw?.generatedAt || '' });
     } catch (err: any) {
         res.status(500).json({ error: 'Failed to load job titles' });
     }

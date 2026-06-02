@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -13,7 +13,7 @@
    ───────────────────────────────────────────────────────────────────── */
 
 @theme {
-  --font-sans: "Space Grotesk", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
 
   /* Surface tokens (light theme) */
   --color-obsidian: #F4F6F5;          /* page background (was near-black) */
@@ -129,6 +129,79 @@ body {
 
 .bg-gradient-tailr-glow {
   background: var(--tailr-gradient-glow);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   BUTTON HOVER: neon scan + color inversion
+   A bright beam sweeps across the button on hover and the fill inverts to
+   neon with dark text. No scale/zoom. Per-variant neon + text colors are set
+   via --scan-neon / --scan-ink (defaults below; overridden per variant).
+   ───────────────────────────────────────────────────────────────────── */
+.btn-scan {
+  --scan-neon: #34D8B4;   /* bright teal beam + inverted fill */
+  --scan-ink: #04130D;    /* inverted text color */
+  position: relative;
+  isolation: isolate;
+  transition: background-color 0.28s ease, color 0.28s ease, border-color 0.28s ease,
+    box-shadow 0.28s ease;
+}
+
+/* The sweeping beam. Sits above the fill, below the label (label is z-10). */
+.btn-scan::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    transparent 35%,
+    rgba(255, 255, 255, 0.35) 48%,
+    var(--scan-neon) 50%,
+    rgba(255, 255, 255, 0.35) 52%,
+    transparent 65%,
+    transparent 100%
+  );
+  transform: translateX(-120%);
+  opacity: 0;
+  transition: opacity 0.05s linear;
+}
+
+/* On hover: fire the sweep and invert the surface to neon-on-dark. */
+.btn-scan:hover:not(:disabled)::before {
+  opacity: 1;
+  animation: btn-scan-sweep 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.btn-scan:hover:not(:disabled) {
+  background-color: var(--scan-neon) !important;
+  border-color: var(--scan-neon) !important;
+}
+
+/* Invert the label (and icons) to dark as the beam lands. Beats the
+   `.btn-primary * { color:#fff!important }` rule via :hover specificity. */
+.btn-scan:hover:not(:disabled),
+.btn-scan:hover:not(:disabled) *,
+.btn-scan:hover:not(:disabled) .relative {
+  color: var(--scan-ink) !important;
+  -webkit-text-fill-color: var(--scan-ink) !important;
+}
+
+/* For the primary variant the green fill is a stacked layer — fade it out on
+   hover so the neon background shows through cleanly. */
+.btn-scan:hover:not(:disabled) > .bg-gradient-tailr,
+.btn-scan.btn-primary:hover:not(:disabled) > div[class*="bg-gradient-tailr"] {
+  opacity: 0 !important;
+}
+
+@keyframes btn-scan-sweep {
+  0%   { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-scan::before { display: none; }
 }
 
 /* Focus-visible ring shared by buttons, inputs, links */

@@ -17,21 +17,86 @@ import {
   Settings as SettingsIcon,
   Send,
   ExternalLink,
+  Layers,
+  FileText,
+  Plus,
+  X,
+  CheckCircle2,
 } from 'lucide-react';
 import { cn, downloadResume } from '../lib/utils';
 import { generateResume } from '../lib/api';
 import { toast } from '../components/ui/Toast';
+import { ColdDmBlock } from '../components/ColdDmBlock';
+import {
+  useBatchQueue,
+  makeEmptyEntry,
+  isEntryValid,
+  MIN_JD_LENGTH,
+  type BatchEntry,
+  type BatchJob,
+} from '../hooks/useBatchQueue';
 import type { GenerationResult, AppConfig } from '../../shared/types';
 
 interface StudioProps {
   config: AppConfig | null;
   hasApiKey: boolean;
-  onNavigate?: (view: 'dashboard' | 'studio' | 'settings') => void;
+  onNavigate?: (view: 'dashboard' | 'studio' | 'settings' | 'vault') => void;
 }
+
+type StudioMode = 'single' | 'batch';
+
+/**
+ * Studio — thin wrapper that switches between the original single-JD flow
+ * (SingleStudio, behavior unchanged) and the concurrent batch flow (BatchStudio).
+ */
+export const Studio = (props: StudioProps) => {
+  const [mode, setMode] = useState<StudioMode>('single');
+  const canGenerate = props.hasApiKey && (props.config?.masterResumePresent ?? false);
+
+  return (
+    <div className="flex flex-col gap-4 md:gap-6 flex-1">
+      {/* Mode toggle — only shown once setup is complete, to avoid clutter on first run. */}
+      {canGenerate && (
+        <div className="flex justify-center md:justify-start">
+          <div className="inline-flex items-center gap-1 rounded-xl bg-white/5 border border-white/10 p-1">
+            <button
+              type="button"
+              onClick={() => setMode('single')}
+              aria-pressed={mode === 'single'}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
+                mode === 'single'
+                  ? 'bg-gradient-tailr-soft text-white border border-[#FF4F00]/30'
+                  : 'text-gray-400 hover:text-white',
+              )}
+            >
+              <FileText size={14} /> Single
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('batch')}
+              aria-pressed={mode === 'batch'}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
+                mode === 'batch'
+                  ? 'bg-gradient-tailr-soft text-white border border-[#FF4F00]/30'
+                  : 'text-gray-400 hover:text-white',
+              )}
+            >
+              <Layers size={14} /> Batch
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === 'single' ? <SingleStudio {...props} /> : <BatchStudio {...props} />}
+    </div>
+  );
+};
 
 type StudioStage = 'input' | 'generating' | 'result';
 
-export const Studio = ({ config, hasApiKey, onNavigate }: StudioProps) => {
+const SingleStudio = ({ config, hasApiKey, onNavigate }: StudioProps) => {
   const [jobDescription, setJobDescription] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [previousJD, setPreviousJD] = useState('');
@@ -142,7 +207,7 @@ export const Studio = ({ config, hasApiKey, onNavigate }: StudioProps) => {
   const blockReason = !hasApiKey
     ? 'Add an LLM API key in Settings before generating.'
     : !config?.masterResumePresent
-    ? 'Upload your master resume from the Library before generating.'
+    ? 'Upload your master resume from the Dashboard before generating.'
     : null;
 
   // ── INPUT STAGE ───────────────────────────────────────────────────
@@ -158,13 +223,6 @@ export const Studio = ({ config, hasApiKey, onNavigate }: StudioProps) => {
               Paste a job description below. We'll match it to your master resume.
             </p>
           </div>
-          {canGenerate && (
-            <div className="hidden md:flex items-center gap-1 text-[11px] text-gray-500">
-              <kbd className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-gray-300 font-mono">⌘</kbd>
-              <kbd className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-gray-300 font-mono">↵</kbd>
-              to generate
-            </div>
-          )}
         </header>
 
         <GlassCard variant="featured" radius="xl" padding="none" className="flex-1 flex flex-col overflow-hidden">
@@ -319,7 +377,20 @@ export const Studio = ({ config, hasApiKey, onNavigate }: StudioProps) => {
                 <div className="h-2 bg-white/5 rounded w-3/4" />
               </div>
             </div>
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#FF4F00]/30 to-transparent h-1/2 w-full animate-[scan_1.6s_linear_infinite]" />
+
+            {/* Scanning beam sweeping down the sheet while tailoring. */}
+            <motion.div
+              aria-hidden
+              className="absolute left-0 right-0 pointer-events-none"
+              initial={{ top: '-20%' }}
+              animate={{ top: ['-20%', '100%'] }}
+              transition={{ duration: 1.6, ease: 'linear', repeat: Infinity }}
+            >
+              {/* soft glow band */}
+              <div className="h-24 -mt-12 bg-gradient-to-b from-transparent via-[#054F31]/25 to-transparent" />
+              {/* crisp scan line */}
+              <div className="h-px w-full bg-[#054F31] shadow-[0_0_12px_2px_rgba(5,79,49,0.7)]" />
+            </motion.div>
           </div>
 
           <div className="h-7 overflow-hidden relative">
@@ -336,9 +407,6 @@ export const Studio = ({ config, hasApiKey, onNavigate }: StudioProps) => {
               </motion.p>
             </AnimatePresence>
           </div>
-          <p className="mt-4 text-xs text-gray-500">
-            Tailoring usually takes 8–20 seconds.
-          </p>
         </div>
       </div>
     );
@@ -454,6 +522,8 @@ export const Studio = ({ config, hasApiKey, onNavigate }: StudioProps) => {
                 </p>
               </div>
 
+              {result.outreachDm?.trim() && <ColdDmBlock dm={result.outreachDm} />}
+
               {result.fitAssessment.atsKeywords.length > 0 && (
                 <div>
                   <h4 className="text-[11px] uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1.5">
@@ -523,7 +593,7 @@ export const Studio = ({ config, hasApiKey, onNavigate }: StudioProps) => {
         </div>
       </div>
 
-      {/* Footer hint — link back to library */}
+      {/* Footer hint — link back to dashboard */}
       {onNavigate && (
         <div className="text-xs text-gray-500 text-center">
           Saved to your{' '}
@@ -532,7 +602,7 @@ export const Studio = ({ config, hasApiKey, onNavigate }: StudioProps) => {
             onClick={() => onNavigate('dashboard')}
             className="text-[#FF4F00] hover:text-[#FF6B1F] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4F00] rounded"
           >
-            Library
+            Dashboard
             <ChevronLeft size={11} className="inline rotate-180 ml-0.5" />
           </button>
           .
@@ -546,5 +616,323 @@ export const Studio = ({ config, hasApiKey, onNavigate }: StudioProps) => {
         </div>
       )}
     </div>
+  );
+};
+
+// ── BATCH STUDIO ───────────────────────────────────────────────────
+//
+// Tailor several JDs at once. Each entry runs through the SAME generation
+// pipeline as Single mode (via useBatchQueue), capped at a small number of
+// concurrent jobs. Completed resumes save to the Vault automatically.
+
+const BatchStudio = ({ config, hasApiKey, onNavigate }: StudioProps) => {
+  const [entries, setEntries] = useState<BatchEntry[]>(() => [makeEmptyEntry(), makeEmptyEntry()]);
+  const { jobs, isRunning, runAll, cancelJob, cancelAll, clearJobs } = useBatchQueue();
+  const contactName = config?.profile?.name || 'Resume';
+  const canGenerate = hasApiKey && (config?.masterResumePresent ?? false);
+
+  const validCount = entries.filter(isEntryValid).length;
+  const hasResults = jobs.length > 0;
+
+  const updateEntry = useCallback((id: string, patch: Partial<BatchEntry>) => {
+    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  }, []);
+
+  const addEntry = useCallback(() => {
+    setEntries((prev) => [...prev, makeEmptyEntry()]);
+  }, []);
+
+  const removeEntry = useCallback((id: string) => {
+    setEntries((prev) => (prev.length > 1 ? prev.filter((e) => e.id !== id) : prev));
+  }, []);
+
+  const handleRunAll = useCallback(() => {
+    if (validCount === 0 || isRunning || !canGenerate) return;
+    void runAll(entries);
+  }, [entries, validCount, isRunning, canGenerate, runAll]);
+
+  const blockReason = !hasApiKey
+    ? 'Add an LLM API key in Settings before generating.'
+    : !config?.masterResumePresent
+    ? 'Upload your master resume from the Dashboard before generating.'
+    : null;
+
+  const doneCount = jobs.filter((j) => j.status === 'done').length;
+  const errorCount = jobs.filter((j) => j.status === 'error').length;
+  const activeCount = jobs.filter((j) => j.status === 'queued' || j.status === 'running').length;
+
+  return (
+    <div className="flex flex-col gap-4 md:gap-6 flex-1">
+      <header className="flex items-end justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white mb-1.5">
+            Tailor a batch
+          </h1>
+          <p className="text-sm md:text-base text-gray-400">
+            Paste several job descriptions. We'll tailor them in parallel and save each to your Vault.
+          </p>
+        </div>
+      </header>
+
+      {blockReason && (
+        <div className="px-4 py-3 text-sm flex items-start gap-2 rounded-xl text-yellow-300 bg-yellow-500/5 border border-yellow-500/10">
+          <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+          <span className="flex-1">{blockReason}</span>
+          {onNavigate && (
+            <button
+              onClick={() => onNavigate(hasApiKey ? 'dashboard' : 'settings')}
+              className="text-xs font-semibold underline hover:no-underline"
+            >
+              Fix it
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── EDITING: JD entry form (hidden once a batch has started) ── */}
+      {!hasResults && (
+        <>
+          <div className="flex flex-col gap-3">
+            {entries.map((entry, i) => {
+              const valid = isEntryValid(entry);
+              const len = entry.jobDescription.trim().length;
+              return (
+                <GlassCard key={entry.id} radius="lg" padding="none" className="overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/5 bg-white/[0.02]">
+                    <span className="text-xs font-semibold text-gray-300">
+                      Job {i + 1}
+                      {entry.companyName.trim() && (
+                        <span className="text-gray-500 font-normal"> · {entry.companyName.trim()}</span>
+                      )}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {len > 0 && (
+                        <span className={cn('text-[11px]', valid ? 'text-gray-600' : 'text-yellow-500/80')}>
+                          {valid ? `${len.toLocaleString()} chars` : `${len}/${MIN_JD_LENGTH} min`}
+                        </span>
+                      )}
+                      {entries.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeEntry(entry.id)}
+                          className="text-gray-500 hover:text-red-400 transition-colors"
+                          aria-label={`Remove job ${i + 1}`}
+                        >
+                          <X size={15} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <textarea
+                    value={entry.jobDescription}
+                    onChange={(e) => updateEntry(entry.id, { jobDescription: e.target.value })}
+                    placeholder="Paste the full job description here…"
+                    className="w-full min-h-[120px] bg-transparent p-4 text-sm leading-relaxed text-white placeholder:text-gray-600 resize-y focus:outline-none"
+                    spellCheck={false}
+                    aria-label={`Job description ${i + 1}`}
+                  />
+                  <div className="px-4 pb-3">
+                    <input
+                      type="text"
+                      value={entry.companyName}
+                      onChange={(e) => updateEntry(entry.id, { companyName: e.target.value })}
+                      placeholder="Company name (optional — overrides the company extracted from the JD)"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-[#054F31] transition-colors"
+                    />
+                  </div>
+                </GlassCard>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <Button variant="ghost" size="sm" icon={<Plus size={14} />} onClick={addEntry} type="button">
+              Add another
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleRunAll}
+              disabled={validCount === 0 || !canGenerate}
+              icon={<Sparkles size={16} />}
+            >
+              Tailor all ({validCount})
+            </Button>
+          </div>
+        </>
+      )}
+
+      {/* ── RUNNING / DONE: compact status bar + results grid ── */}
+      {hasResults && (
+        <div className="flex flex-col gap-4">
+          <GlassCard radius="lg" padding="none" className="overflow-hidden">
+            <div className="flex items-center justify-between gap-3 px-4 py-3 flex-wrap">
+              <div className="flex items-center gap-3 text-sm">
+                {isRunning ? (
+                  <Spinner size={16} className="text-[#FF4F00]" />
+                ) : (
+                  <CheckCircle2 size={18} className="text-green-400" />
+                )}
+                <span className="font-semibold text-white">
+                  {isRunning ? `Tailoring ${jobs.length} resume${jobs.length > 1 ? 's' : ''}…` : 'Batch complete'}
+                </span>
+                <span className="text-xs text-gray-400 flex items-center gap-2.5">
+                  {activeCount > 0 && <span>{activeCount} in progress</span>}
+                  {doneCount > 0 && (
+                    <span className="inline-flex items-center gap-1 text-green-400">
+                      <CheckCircle2 size={12} /> {doneCount}
+                    </span>
+                  )}
+                  {errorCount > 0 && (
+                    <span className="inline-flex items-center gap-1 text-red-400">
+                      <AlertTriangle size={12} /> {errorCount}
+                    </span>
+                  )}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {isRunning ? (
+                  <Button variant="secondary" size="sm" icon={<X size={14} />} onClick={cancelAll}>
+                    Cancel all
+                  </Button>
+                ) : (
+                  <>
+                    {onNavigate && doneCount > 0 && (
+                      <Button variant="ghost" size="sm" onClick={() => onNavigate('dashboard')}>
+                        View in Vault
+                      </Button>
+                    )}
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      icon={<Plus size={14} />}
+                      onClick={() => {
+                        clearJobs();
+                        setEntries([makeEmptyEntry(), makeEmptyEntry()]);
+                      }}
+                    >
+                      New batch
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          </GlassCard>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {jobs.map((job, i) => (
+              <BatchResultCard
+                key={job.id}
+                job={job}
+                index={i}
+                contactName={contactName}
+                onCancel={() => cancelJob(job.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+interface BatchResultCardProps {
+  job: BatchJob;
+  index: number;
+  contactName: string;
+  onCancel: () => void;
+}
+
+const BatchResultCard: React.FC<BatchResultCardProps> = ({ job, index, contactName, onCancel }) => {
+  const result = job.result;
+  const label = job.companyName || result?.fitAssessment.company || `Job ${index + 1}`;
+
+  return (
+    <GlassCard radius="lg" padding="none" className="overflow-hidden flex flex-col">
+      <div className="flex items-center gap-3 p-4">
+        {/* Status indicator / score */}
+        <div className="shrink-0">
+          {job.status === 'done' && result ? (
+            <ScoreRing score={result.fitAssessment.score} size={48} strokeWidth={4} />
+          ) : job.status === 'error' ? (
+            <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+              <AlertTriangle size={18} className="text-red-400" />
+            </div>
+          ) : (
+            <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+              <Spinner size={18} className="text-[#FF4F00]" />
+            </div>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <h4 className="text-sm font-bold text-white truncate">
+            {job.status === 'done' && result ? result.fitAssessment.role : label}
+          </h4>
+          <p className="text-xs text-gray-400 truncate">
+            {job.status === 'done' && result ? (
+              <>
+                {result.fitAssessment.company} · Fit {result.fitAssessment.score}/10
+              </>
+            ) : job.status === 'error' ? (
+              <span className="text-red-400">{job.error || 'Failed'}</span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5">
+                {job.statusMessage || 'Working…'}
+              </span>
+            )}
+          </p>
+        </div>
+
+        {/* Cancel button while in flight */}
+        {(job.status === 'queued' || job.status === 'running') && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="shrink-0 text-gray-500 hover:text-red-400 transition-colors"
+            aria-label="Cancel this job"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+
+      {/* Download actions on completion */}
+      {job.status === 'done' && result && (
+        <div className="flex items-center gap-1.5 px-4 pb-4 flex-wrap">
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Download size={14} />}
+            onClick={() => downloadResume(result.pdfFilename, result.fitAssessment.company, 'pdf', contactName)}
+          >
+            PDF
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Download size={14} />}
+            onClick={() => downloadResume(result.pdfFilename, result.fitAssessment.company, 'docx', contactName)}
+          >
+            DOCX
+          </Button>
+          <a
+            href={`/api/resume/${result.pdfFilename}`}
+            target="_blank"
+            rel="noreferrer"
+            className="ml-auto text-[11px] text-gray-400 hover:text-white inline-flex items-center gap-1 underline-offset-2 hover:underline"
+          >
+            Preview <ExternalLink size={11} />
+          </a>
+        </div>
+      )}
+
+      {job.status === 'done' && result?.outreachDm?.trim() && (
+        <div className="px-4 pb-4">
+          <ColdDmBlock dm={result.outreachDm} variant="compact" />
+        </div>
+      )}
+    </GlassCard>
   );
 };

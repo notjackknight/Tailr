@@ -29,7 +29,7 @@ const NAME_SIZE = 40;            // 20pt in half-points
 const SECTION_HEADING_SIZE = 22; // 11pt in half-points
 
 const BASE_LINE_SPACING = 252;
-const BASE_HEADING_BEFORE = 50;
+const BASE_HEADING_BEFORE = 140;
 const BASE_HEADING_AFTER = 25;
 
 const PAGE_HEIGHT_TWIPS = 15840;
@@ -189,6 +189,7 @@ function alignedRow(
 ): Table {
     return new Table({
         width: { size: AVAILABLE_WIDTH_TWIPS, type: WidthType.DXA },
+        indent: { size: 0, type: WidthType.DXA },
         borders: NO_BORDERS,
         rows: [
             new TableRow({

@@ -7,6 +7,7 @@ import {
   Trash2,
   Clock,
   MoreVertical,
+  Sparkles,
 } from 'lucide-react';
 import { GlassCard } from './ui/GlassCard';
 import { ScoreRing } from './ui/ScoreRing';
@@ -64,6 +65,15 @@ export const VaultCard = ({
         <ScoreRing score={entry.score} size={44} strokeWidth={3.5} animate={false} />
       </div>
 
+      {entry.kind === 'linkedin-default' && (
+        <span
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 mb-1.5 rounded-md bg-[#FF4F00]/10 text-[#FF8A4F] border border-[#FF4F00]/30 text-[10px] font-semibold uppercase tracking-wider"
+          title="Broad summary resume — works well as a LinkedIn default"
+        >
+          <Sparkles size={10} />
+          Summary
+        </span>
+      )}
       <h3 className="font-semibold text-base text-white leading-tight truncate" title={entry.role}>
         {entry.role}
       </h3>
