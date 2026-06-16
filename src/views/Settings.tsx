@@ -35,6 +35,7 @@ import type {
 } from '../../shared/types';
 
 const TONES: Array<{ value: UserPreferences['tone']; label: string; hint: string }> = [
+    { value: 'auto',          label: 'Auto',           hint: 'Let the AI match the tone to each job description.' },
     { value: 'professional',  label: 'Professional',   hint: 'Polished, neutral default.' },
     { value: 'concise',       label: 'Concise',        hint: 'Shorter bullets, action verbs.' },
     { value: 'impact-driven', label: 'Impact-driven',  hint: 'Lead with outcomes & metrics.' },

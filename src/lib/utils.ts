@@ -24,6 +24,12 @@ export function scoreTextClass(score: number): string {
     return 'text-red-400';
 }
 
+/** Capitalize a tone slug for display (e.g. "impact-driven" → "Impact-driven"). */
+export function formatTone(tone: string): string {
+    if (!tone) return '';
+    return tone.charAt(0).toUpperCase() + tone.slice(1);
+}
+
 /** Trigger a download via a temporary anchor element. */
 export function downloadFile(url: string, filename: string) {
     const a = document.createElement('a');

@@ -64,5 +64,6 @@ volunteer:
 - Do **not** include any preamble, commentary, or explanation.
 - Use YAML multi-line scalars (`>`) for multi-sentence text.
 - Preserve every fact, metric, employer, date, and credential from the source verbatim. Do not invent or infer information not present.
-- If the source contains a section that doesn't fit the template (e.g., "Publications", "Patents", "Speaking"), include it under the closest matching section or omit it gracefully — never invent.
+- If the source contains a flat list of skills, competencies, or keywords (e.g., a "Core Competencies", "Key Skills", or "Areas of Expertise" section), capture it as a `skills` entry — use the source's heading as the `category` (e.g. `category: "Core Competencies"`) and the comma-joined keywords as `items`. Do not drop it. If those same keywords are already covered by other categorized `skills` entries, omit the duplicates rather than repeating them.
+- If the source contains some other section that doesn't fit the template (e.g., "Publications", "Patents", "Speaking"), include it under the closest matching section or omit it gracefully — never invent.
 - If a field is unknown (e.g., GPA not listed), omit the field entirely. Do not write "N/A".

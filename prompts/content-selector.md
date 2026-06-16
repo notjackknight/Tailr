@@ -53,8 +53,8 @@ The `projects` array in the master resume YAML has been **pre-filtered** — eve
 
 ### 6. Education
 - Include all entries from the master resume's `education` array unless space is severely constrained.
-- For each entry, preserve institution, degree, dates, and any GPA / honors / minor present in the master resume.
-- Optionally add a single line of relevant coursework if it strengthens ATS keyword coverage.
+- For each entry, preserve institution, degree, and dates.
+- Emit `gpa`, `honors`, `minor`, and `coursework` **only if that field is present in the master resume entry**. If a field is absent from the master, omit it entirely — never invent or infer it, even to strengthen keyword coverage. Do not add coursework, honors, or any other education detail that the candidate did not provide.
 
 ### 7. Optional Sections (Certifications / Awards / Volunteer)
 - Include any of these sections only if the master resume contains entries AND they add value for the JD.
@@ -98,11 +98,14 @@ If the JD is a stretch, do not refuse to generate. Note the gap in `fit_assessme
 ## Tone
 
 `preferences.tone` controls overall voice:
+- `auto` — infer the best-fitting tone yourself from the job description: weigh the role's seniority, function (IC vs. management), and the language/values in the JD, then apply whichever of the named tones below fits best.
 - `professional` — neutral, polished, hiring-manager-friendly default.
 - `concise` — shorter bullets, fewer adjectives, action-verb heavy.
 - `impact-driven` — lead each bullet with a result/metric where the master resume contains one.
 - `technical` — preserve technical specificity; favor architectural framing over outcomes.
 - `leadership` — emphasize ownership, scope, team size, and stakeholder management.
+
+**Always set `fit_assessment.chosen_tone`** to the single tone you actually applied — one of `professional`, `concise`, `impact-driven`, `technical`, or `leadership`. When `preferences.tone` is `auto`, this is the tone you selected; otherwise it echoes the explicit preference. Never output the literal value `auto` here.
 
 ---
 
@@ -118,7 +121,8 @@ Return a JSON object with this exact structure. Include only the optional sectio
     "stretch_areas": ["specific gaps"],
     "keyword_overlap": ["keyword1", "keyword2"],
     "company": "<extracted from JD>",
-    "role": "<extracted from JD>"
+    "role": "<extracted from JD>",
+    "chosen_tone": "<the tone applied — see Tone section>"
   },
   "resume_data": {
     "profile": "...",
@@ -139,10 +143,11 @@ Return a JSON object with this exact structure. Include only the optional sectio
       "institution": "...",
       "location": "...",
       "degree": "...",
+      "graduation": "...",
       "minor": "...",
       "gpa": "...",
-      "graduation": "...",
-      "honors": ["..."]
+      "honors": ["..."],
+      "coursework": "..."
     }],
     "certifications": [{ "name": "...", "issuer": "...", "date": "..." }],
     "awards": [{ "name": "...", "issuer": "...", "date": "...", "description": "..." }],
@@ -150,5 +155,7 @@ Return a JSON object with this exact structure. Include only the optional sectio
   }
 }
 ```
+
+The example above shows every possible key for illustration. The education keys `minor`, `gpa`, `honors`, and `coursework` are **optional** — include a key only when that field exists in the corresponding master resume entry, and omit the key entirely otherwise. Never emit a placeholder or invented value for them.
 
 Output only valid JSON — no markdown fences, no commentary, no preamble.

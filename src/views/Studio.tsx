@@ -23,7 +23,7 @@ import {
   X,
   CheckCircle2,
 } from 'lucide-react';
-import { cn, downloadResume } from '../lib/utils';
+import { cn, downloadResume, formatTone } from '../lib/utils';
 import { generateResume } from '../lib/api';
 import { toast } from '../components/ui/Toast';
 import { ColdDmBlock } from '../components/ColdDmBlock';
@@ -520,6 +520,12 @@ const SingleStudio = ({ config, hasApiKey, onNavigate }: StudioProps) => {
                 <p className="text-sm text-gray-300 leading-relaxed">
                   {result.fitAssessment.reasoning}
                 </p>
+                {result.fitAssessment.chosenTone && (
+                  <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FF4F00]/10 text-[#FF4F00] border border-[#FF4F00]/20 text-xs font-medium">
+                    <Sparkles size={12} />
+                    Tone: {formatTone(result.fitAssessment.chosenTone)}
+                  </div>
+                )}
               </div>
 
               {result.outreachDm?.trim() && <ColdDmBlock dm={result.outreachDm} />}

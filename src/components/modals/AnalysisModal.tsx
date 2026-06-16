@@ -12,6 +12,7 @@ import { ScoreRing } from '../ui/ScoreRing';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { parseJsonArray } from '../../lib/api';
+import { formatTone } from '../../lib/utils';
 import { toast } from '../ui/Toast';
 import { ColdDmBlock } from '../ColdDmBlock';
 
@@ -24,6 +25,7 @@ interface AnalysisModalProps {
         stretch_areas: string;
         ats_keywords: string;
         outreach_dm?: string;
+        chosen_tone?: string;
     };
     onClose: () => void;
     /** Optional callback — wires "Open in Tailor" affordance. */
@@ -93,6 +95,12 @@ export const AnalysisModal = ({ entry, onClose, onOpenInStudio }: AnalysisModalP
                         <p className="text-sm md:text-base text-gray-300 leading-relaxed">
                             {entry.reasoning}
                         </p>
+                        {entry.chosen_tone && (
+                            <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#FF4F00]/10 text-[#FF4F00] border border-[#FF4F00]/20 text-xs font-medium">
+                                <Sparkles size={12} />
+                                Tone: {formatTone(entry.chosen_tone)}
+                            </div>
+                        )}
                     </div>
                 )}
 

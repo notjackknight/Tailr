@@ -27,8 +27,11 @@ export interface PinnedExperience {
 }
 
 export interface UserPreferences {
-    /** Writing tone for the tailored resume. */
-    tone: 'professional' | 'concise' | 'impact-driven' | 'technical' | 'leadership';
+    /**
+     * Writing tone for the tailored resume. `auto` lets the model infer the
+     * best-fitting tone from the job description during content selection.
+     */
+    tone: 'auto' | 'professional' | 'concise' | 'impact-driven' | 'technical' | 'leadership';
     /** Target page count (currently only 1 is supported end-to-end). */
     targetPageLength: 1;
     /**
@@ -119,6 +122,13 @@ export interface FitAssessment {
     atsKeywords: string[];
     company: string;
     role: string;
+    /**
+     * The writing tone applied to this resume. When the user's tone preference
+     * is `auto`, this is the tone the model chose for the JD; otherwise it
+     * echoes the explicit preference. Optional — absent on records generated
+     * before this field existed.
+     */
+    chosenTone?: string;
 }
 
 /** Raw shape returned by Gemini (snake_case) — mapped to FitAssessment at the server boundary. */
@@ -129,6 +139,8 @@ export interface RawFitAssessment {
     keyword_overlap: string[];
     company: string;
     role: string;
+    /** Resolved writing tone (see FitAssessment.chosenTone). Optional. */
+    chosen_tone?: string;
 }
 
 export interface ContentSelectionResult {
@@ -178,6 +190,8 @@ export interface GenerationRecord {
     iterations: number;
     kind: GenerationKind;
     outreach_dm: string;
+    /** Resolved writing tone for this generation. '' on pre-existing records. */
+    chosen_tone: string;
     created_at: string;
 }
 
@@ -210,6 +224,8 @@ export interface HistoryEntry {
     iterations: number;
     kind: GenerationKind;
     outreach_dm: string;
+    /** Resolved writing tone for this generation. '' on pre-existing records. */
+    chosen_tone: string;
     created_at: string;
 }
 

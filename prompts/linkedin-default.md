@@ -74,8 +74,8 @@ The `projects:` array has been **pre-filtered** to the most broadly relevant ent
 
 ### Education
 - Include all entries unless space is severely constrained.
-- Preserve institution, degree, dates, GPA, honors, minor.
-- Optional one line of relevant coursework if it strengthens cluster keyword coverage.
+- Preserve institution, degree, and dates.
+- Emit `gpa`, `honors`, `minor`, and `coursework` **only if that field is present in the master resume entry**. If a field is absent from the master, omit it entirely — never invent or infer it, even to strengthen keyword coverage.
 
 ### Optional Sections (Certifications / Awards / Volunteer)
 - Include only if the master resume has entries AND they reinforce the cluster.
@@ -114,11 +114,14 @@ Total content target: ~3,500–4,000 characters. Aim slightly over — overflow 
 ## Tone
 
 `preferences.tone` controls overall voice:
+- `auto` — pick the best-fitting tone yourself based on the role cluster you chose for this candidate (its seniority and function), then apply whichever of the named tones below fits best.
 - `professional` — neutral, polished, recruiter-friendly default.
 - `concise` — shorter bullets, fewer adjectives, action-verb heavy.
 - `impact-driven` — lead each bullet with a result/metric where the master resume contains one.
 - `technical` — preserve technical specificity; favor architectural framing.
 - `leadership` — emphasize ownership, scope, team size, stakeholder management.
+
+**Always set `fit_assessment.chosen_tone`** to the single tone you actually applied — one of `professional`, `concise`, `impact-driven`, `technical`, or `leadership`. When `preferences.tone` is `auto`, this is the tone you selected; otherwise it echoes the explicit preference. Never output the literal value `auto` here.
 
 ---
 
@@ -141,7 +144,8 @@ Return a JSON object with this exact structure. The `fit_assessment` block descr
     "stretch_areas": ["..."],
     "keyword_overlap": ["..."],
     "company": "LinkedIn Default",
-    "role": "<primary cluster title>"
+    "role": "<primary cluster title>",
+    "chosen_tone": "<the tone applied — see Tone section>"
   },
   "resume_data": {
     "profile": "...",
@@ -162,10 +166,11 @@ Return a JSON object with this exact structure. The `fit_assessment` block descr
       "institution": "...",
       "location": "...",
       "degree": "...",
+      "graduation": "...",
       "minor": "...",
       "gpa": "...",
-      "graduation": "...",
-      "honors": ["..."]
+      "honors": ["..."],
+      "coursework": "..."
     }],
     "certifications": [{ "name": "...", "issuer": "...", "date": "..." }],
     "awards": [{ "name": "...", "issuer": "...", "date": "...", "description": "..." }],
@@ -173,5 +178,7 @@ Return a JSON object with this exact structure. The `fit_assessment` block descr
   }
 }
 ```
+
+The example above shows every possible key for illustration. The education keys `minor`, `gpa`, `honors`, and `coursework` are **optional** — include a key only when that field exists in the corresponding master resume entry, and omit the key entirely otherwise. Never emit a placeholder or invented value for them.
 
 Output only valid JSON — no markdown fences, no commentary, no preamble.

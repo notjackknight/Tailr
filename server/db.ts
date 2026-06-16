@@ -37,6 +37,7 @@ export function getDb(): Database.Database {
         iterations INTEGER DEFAULT 1,
         kind TEXT NOT NULL DEFAULT 'tailored',
         outreach_dm TEXT DEFAULT '',
+        chosen_tone TEXT DEFAULT '',
         created_at TEXT DEFAULT (datetime('now'))
       )
     `);
@@ -47,6 +48,9 @@ export function getDb(): Database.Database {
         }
         if (!cols.some((c) => c.name === 'outreach_dm')) {
             db.exec(`ALTER TABLE generations ADD COLUMN outreach_dm TEXT DEFAULT ''`);
+        }
+        if (!cols.some((c) => c.name === 'chosen_tone')) {
+            db.exec(`ALTER TABLE generations ADD COLUMN chosen_tone TEXT DEFAULT ''`);
         }
     }
     return db;
@@ -66,11 +70,12 @@ export function insertGeneration(data: {
     iterations: number;
     kind?: GenerationKind;
     outreachDm?: string;
+    chosenTone?: string;
 }): number {
     const db = getDb();
     const stmt = db.prepare(`
-    INSERT INTO generations (company, role, score, reasoning, stretch_areas, ats_keywords, job_description, resume_data_json, pdf_filename, fill_status, iterations, kind, outreach_dm)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO generations (company, role, score, reasoning, stretch_areas, ats_keywords, job_description, resume_data_json, pdf_filename, fill_status, iterations, kind, outreach_dm, chosen_tone)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
     const result = stmt.run(
         data.company,
@@ -86,6 +91,7 @@ export function insertGeneration(data: {
         data.iterations,
         data.kind ?? 'tailored',
         data.outreachDm ?? '',
+        data.chosenTone ?? '',
     );
     return result.lastInsertRowid as number;
 }

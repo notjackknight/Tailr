@@ -127,6 +127,7 @@ export async function* runPipeline(
             iterations: 1,
             kind,
             outreachDm,
+            chosenTone: fit_assessment.chosen_tone || '',
         });
 
         yield {
@@ -140,6 +141,7 @@ export async function* runPipeline(
                     atsKeywords: fit_assessment.keyword_overlap || [],
                     company,
                     role,
+                    chosenTone: fit_assessment.chosen_tone || '',
                 },
                 pdfFilename: renderResult.pdfPath.split(/[/\\]/).pop()!,
                 fillStatus: renderResult.fillStatus,
