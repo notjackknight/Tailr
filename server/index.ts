@@ -140,7 +140,7 @@ app.put('/api/preferences', (req, res) => {
         return;
     }
     const allowedTones: UserPreferences['tone'][] =
-        ['professional', 'concise', 'impact-driven', 'technical', 'leadership'];
+        ['auto', 'professional', 'concise', 'impact-driven', 'technical', 'leadership'];
     const tone = allowedTones.includes(body.tone as UserPreferences['tone'])
         ? (body.tone as UserPreferences['tone'])
         : 'professional';
